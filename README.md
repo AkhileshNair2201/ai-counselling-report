@@ -1,6 +1,6 @@
 # My Project
 
-FastAPI service for ingesting audio files, plus a lightweight React UI in `docs/web`.
+FastAPI service for ingesting audio files, plus a lightweight React UI in `src/web`.
 
 ## Quickstart
 
@@ -14,7 +14,7 @@ uvicorn my_project.main:app --reload --app-dir src
 ## UI (React)
 
 ```bash
-cd docs/web
+cd src/web
 python3 -m http.server 5173
 ```
 
