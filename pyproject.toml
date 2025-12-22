@@ -12,6 +12,8 @@ dependencies = [
   "uvicorn[standard]",
   "python-multipart",
   "python-dotenv",
+  "SQLAlchemy",
+  "psycopg2-binary",
 ]
 
 [tool.setuptools]

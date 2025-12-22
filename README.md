@@ -19,3 +19,7 @@ python3 -m http.server 5173
 ```
 
 Open `http://127.0.0.1:5173`.
+
+## Database Admin (pgAdmin)
+
+pgAdmin runs at `http://127.0.0.1:5050`.
