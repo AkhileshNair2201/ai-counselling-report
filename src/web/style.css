@@ -1,0 +1,86 @@
+:root {
+  color-scheme: light;
+  font-family: "DM Sans", "Trebuchet MS", sans-serif;
+  background: radial-gradient(circle at top, #fff7e6, #f1efe8 55%, #e9ece7);
+  color: #1a1a1a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 32px 16px;
+}
+
+.page {
+  width: min(640px, 100%);
+}
+
+.card {
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 24px;
+  padding: 32px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(6px);
+}
+
+h1 {
+  margin: 0 0 8px;
+  font-size: 2rem;
+}
+
+.subtitle {
+  margin: 0 0 24px;
+  color: #4a4a4a;
+}
+
+.form {
+  display: grid;
+  gap: 16px;
+}
+
+input[type="file"] {
+  padding: 12px;
+  border: 1px solid #cfd3d6;
+  border-radius: 12px;
+  background: #fff;
+}
+
+button {
+  border: none;
+  border-radius: 999px;
+  padding: 12px 24px;
+  background: #1f4ed8;
+  color: #fff;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(31, 78, 216, 0.3);
+}
+
+.status {
+  margin-top: 16px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: #f2f4ff;
+  color: #2c357a;
+}
+
+.response {
+  margin-top: 16px;
+  padding: 16px;
+  border-radius: 12px;
+  background: #0f172a;
+  color: #e2e8f0;
+  font-size: 0.9rem;
+  overflow-x: auto;
+}
