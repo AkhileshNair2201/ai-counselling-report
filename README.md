@@ -23,3 +23,27 @@ Open `http://127.0.0.1:5173`.
 ## Database Admin (pgAdmin)
 
 pgAdmin runs at `http://127.0.0.1:5050`.
+
+## Migrations
+
+```bash
+alembic upgrade head
+```
+
+Create a new migration:
+
+```bash
+alembic revision -m "describe_change"
+```
+
+Create and autogenerate (optional):
+
+```bash
+alembic revision --autogenerate -m "describe_change"
+```
+
+Rollback the last migration:
+
+```bash
+alembic downgrade -1
+```
