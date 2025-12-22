@@ -8,7 +8,7 @@ FastAPI service for ingesting audio files, plus a lightweight React UI in `src/w
 python3 -m venv .venv
 source .venv/bin/activate
 pip3 install -r requirements.txt
-uvicorn my_project.main:app --reload --app-dir src
+uvicorn server.main:app --reload --app-dir src
 ```
 
 ## UI (React)

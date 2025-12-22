@@ -1,10 +1,39 @@
 (function () {
-  const { useState } = React;
+  const { useEffect, useState } = React;
+  const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000/api/v1";
 
   function App() {
     const [file, setFile] = useState(null);
     const [status, setStatus] = useState("");
     const [response, setResponse] = useState(null);
+    const [apiBaseUrl, setApiBaseUrl] = useState(DEFAULT_API_BASE_URL);
+
+    useEffect(() => {
+      let isMounted = true;
+
+      async function loadEnv() {
+        try {
+          const res = await fetch(`${DEFAULT_API_BASE_URL}/config`);
+          if (!res.ok) {
+            return;
+          }
+          const env = await res.json();
+          if (isMounted && env.API_BASE_URL) {
+            setApiBaseUrl(env.API_BASE_URL);
+          }
+        } catch (error) {
+          if (isMounted) {
+            setStatus("Using default API base URL.");
+          }
+        }
+      }
+
+      loadEnv();
+
+      return () => {
+        isMounted = false;
+      };
+    }, []);
 
     async function handleSubmit(event) {
       event.preventDefault();
@@ -20,7 +49,7 @@
 
       try {
         setStatus("Uploading...");
-        const res = await fetch("http://127.0.0.1:8000/upload", {
+        const res = await fetch(`${apiBaseUrl}/upload`, {
           method: "POST",
           body: formData,
         });
