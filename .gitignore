@@ -14,8 +14,8 @@ ENV/
 .env/
 
 # Uploads
-src/my_project/uploads/*
-!src/my_project/uploads/.gitkeep
+src/server/uploads/*
+!src/server/uploads/.gitkeep
 
 # OS
 .DS_Store
