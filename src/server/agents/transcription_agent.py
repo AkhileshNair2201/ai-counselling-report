@@ -48,7 +48,7 @@ class TranscriptionAgent(BaseModel):
             model=model,
         )
 
-    def transcribe(self, file_path: Path) -> str:
+    def transcribe(self, file_path: Path) -> dict[str, object]:
         if not file_path.exists():
             raise FileNotFoundError(f"Audio file not found: {file_path}")
 
@@ -56,6 +56,16 @@ class TranscriptionAgent(BaseModel):
             response = self.client.audio.transcriptions.create(
                 model=self.model,
                 file=audio_file,
+                response_format="verbose_json",
             )
 
-        return response.text
+        segments = []
+        for segment in response.segments or []:
+            segments.append(
+                {
+                    "text": segment.text,
+                    "timestamp": {"start": segment.start, "end": segment.end},
+                }
+            )
+
+        return {"text": response.text, "segments": segments}

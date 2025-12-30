@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
 
 from fastapi import HTTPException, UploadFile
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from server.models.audio import AudioFile
+from server.models.transcript import Transcript
 from server.models.database import SessionLocal
 from server.agents.transcription_agent import TranscriptionAgent
 
@@ -63,7 +65,21 @@ def _resolve_audio_path(file_key: str) -> Path:
     return matching
 
 
-def transcribe_audio(file_key: str) -> dict[str, str]:
+def _calculate_duration_seconds(segments: list[dict[str, object]]) -> float | None:
+    if not segments:
+        return None
+    max_end = None
+    for segment in segments:
+        timestamp = segment.get("timestamp") if isinstance(segment, dict) else None
+        end_value = None
+        if isinstance(timestamp, dict):
+            end_value = timestamp.get("end")
+        if isinstance(end_value, (int, float)):
+            max_end = end_value if max_end is None else max(max_end, end_value)
+    return float(max_end) if max_end is not None else None
+
+
+def transcribe_audio(file_key: str) -> dict[str, object]:
     with SessionLocal() as session:
         result = session.execute(
             select(AudioFile).where(AudioFile.file_key == file_key)
@@ -77,6 +93,97 @@ def transcribe_audio(file_key: str) -> dict[str, str]:
     except ValueError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
-    transcript = agent.transcribe(audio_path)
+    transcript_payload = agent.transcribe(audio_path)
+    transcript_text = str(transcript_payload.get("text", ""))
+    segments = transcript_payload.get("segments", [])
+    duration_seconds = (
+        _calculate_duration_seconds(segments)
+        if isinstance(segments, list)
+        else None
+    )
 
-    return {"file_key": file_key, "transcript": transcript}
+    with SessionLocal() as session:
+        existing = session.execute(
+            select(Transcript).where(Transcript.audio_file_id == result.id)
+        ).scalar_one_or_none()
+        if existing is None:
+            record = Transcript(
+                audio_file_id=result.id,
+                text=transcript_text,
+                segments=segments,
+                duration_seconds=duration_seconds,
+            )
+            session.add(record)
+        else:
+            existing.text = transcript_text
+            existing.segments = segments
+            existing.duration_seconds = duration_seconds
+            existing.updated_at = datetime.utcnow()
+
+        session.commit()
+
+        stored = session.execute(
+            select(Transcript).where(Transcript.audio_file_id == result.id)
+        ).scalar_one()
+
+    return {
+        "file_key": file_key,
+        "text": stored.text,
+        "segments": stored.segments or [],
+    }
+
+
+def list_transcripts(page: int, page_size: int) -> dict[str, object]:
+    page = max(page, 1)
+    page_size = min(max(page_size, 1), 100)
+    offset_value = (page - 1) * page_size
+
+    with SessionLocal() as session:
+        total = session.execute(select(func.count()).select_from(Transcript)).scalar_one()
+        rows = session.execute(
+            select(AudioFile, Transcript)
+            .join(Transcript, Transcript.audio_file_id == AudioFile.id)
+            .order_by(AudioFile.created_at.desc())
+            .offset(offset_value)
+            .limit(page_size)
+        ).all()
+
+    items = []
+    for audio, transcript in rows:
+        duration = transcript.duration_seconds
+        if duration is None and transcript.segments:
+            duration = _calculate_duration_seconds(transcript.segments)
+        items.append(
+            {
+                "file_key": audio.file_key,
+                "original_filename": audio.original_filename,
+                "content_type": audio.content_type,
+                "duration_seconds": duration,
+                "transcript_available": True,
+            }
+        )
+
+    return {
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "items": items,
+    }
+
+
+def get_transcript_segments(file_key: str) -> dict[str, object]:
+    with SessionLocal() as session:
+        row = session.execute(
+            select(AudioFile, Transcript)
+            .join(Transcript, Transcript.audio_file_id == AudioFile.id)
+            .where(AudioFile.file_key == file_key)
+        ).first()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Transcript not found")
+        audio, transcript = row
+
+    return {
+        "file_key": audio.file_key,
+        "text": transcript.text,
+        "segments": transcript.segments or [],
+    }

@@ -50,6 +50,12 @@ h1 {
   justify-content: flex-start;
 }
 
+.nav {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
 input[type="file"] {
   padding: 12px;
   border: 1px solid #cfd3d6;
@@ -70,6 +76,11 @@ button {
 
 button.secondary {
   background: #0f766e;
+}
+
+button.ghost {
+  background: #e2e8f0;
+  color: #0f172a;
 }
 
 button:disabled {
@@ -123,4 +134,75 @@ button:hover {
   font-family: "DM Sans", "Trebuchet MS", sans-serif;
   font-size: 0.95rem;
   background: #fff;
+}
+
+.list {
+  margin-top: 12px;
+  display: grid;
+  gap: 16px;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+
+.table th,
+.table td {
+  padding: 12px;
+  text-align: left;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.table th {
+  color: #374151;
+  font-weight: 600;
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.page-meta {
+  color: #4b5563;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  z-index: 10;
+}
+
+.modal {
+  width: min(720px, 100%);
+  background: #fff;
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.3);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.modal-body {
+  max-height: 60vh;
+  overflow: auto;
+}
+
+.modal-content {
+  margin: 0;
+  white-space: pre-wrap;
+  font-family: "DM Sans", "Trebuchet MS", sans-serif;
 }

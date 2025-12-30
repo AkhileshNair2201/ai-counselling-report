@@ -13,6 +13,7 @@ sys.path.append(str(ROOT_DIR / "src"))
 
 from server.config import get_database_url
 from server.models.database import Base
+import server.models  # noqa: F401
 
 config = context.config
 
