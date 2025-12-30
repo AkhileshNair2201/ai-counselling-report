@@ -5,3 +5,5 @@ python-dotenv
 SQLAlchemy
 psycopg2-binary
 alembic
+openai
+langchain-openai

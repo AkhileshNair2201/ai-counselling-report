@@ -21,3 +21,44 @@ def get_database_url() -> str:
     port = os.getenv("POSTGRES_PORT", "5434")
     db_name = os.getenv("POSTGRES_DB", "ally")
     return f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{db_name}"
+
+
+def get_openai_api_key() -> str:
+    return os.getenv("OPENAI_API_KEY", "YOUR_OPENAI_API_KEY")
+
+
+def _get_int(name: str, default: int) -> int:
+    value = os.getenv(name, "").strip()
+    if not value:
+        return default
+    try:
+        return int(value)
+    except ValueError:
+        return default
+
+
+def _get_float(name: str, default: float) -> float:
+    value = os.getenv(name, "").strip()
+    if not value:
+        return default
+    try:
+        return float(value)
+    except ValueError:
+        return default
+
+
+def get_openai_proxy_url() -> str | None:
+    proxy_url = os.getenv("OPENAI_PROXY_URL", "").strip()
+    return proxy_url or None
+
+
+def get_openai_timeout_seconds() -> float:
+    return _get_float("OPENAI_TIMEOUT_SECONDS", 60.0)
+
+
+def get_openai_max_retries() -> int:
+    return _get_int("OPENAI_MAX_RETRIES", 2)
+
+
+def get_openai_transcription_model() -> str:
+    return os.getenv("OPENAI_TRANSCRIPTION_MODEL", "whisper-1")

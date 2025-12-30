@@ -44,6 +44,12 @@ h1 {
   gap: 16px;
 }
 
+.actions {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-start;
+}
+
 input[type="file"] {
   padding: 12px;
   border: 1px solid #cfd3d6;
@@ -60,6 +66,17 @@ button {
   font-size: 1rem;
   cursor: pointer;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+button.secondary {
+  background: #0f766e;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+  box-shadow: none;
+  transform: none;
 }
 
 button:hover {
@@ -83,4 +100,27 @@ button:hover {
   color: #e2e8f0;
   font-size: 0.9rem;
   overflow-x: auto;
+}
+
+.transcript {
+  margin-top: 20px;
+  display: grid;
+  gap: 8px;
+}
+
+.transcript label {
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.transcript textarea {
+  width: 100%;
+  min-height: 180px;
+  resize: vertical;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid #cfd3d6;
+  font-family: "DM Sans", "Trebuchet MS", sans-serif;
+  font-size: 0.95rem;
+  background: #fff;
 }

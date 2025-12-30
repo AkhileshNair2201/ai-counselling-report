@@ -11,6 +11,14 @@ pip3 install -r requirements.txt
 uvicorn server.main:app --reload --app-dir src
 ```
 
+## Transcription
+
+Set `OPENAI_API_KEY` in `.env` (placeholder is already there), then call:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/v1/transcribe/<file_key>
+```
+
 ## UI (React)
 
 ```bash

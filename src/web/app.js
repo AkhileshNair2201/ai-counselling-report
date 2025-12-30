@@ -6,6 +6,9 @@
     const [file, setFile] = useState(null);
     const [status, setStatus] = useState("");
     const [response, setResponse] = useState(null);
+    const [transcript, setTranscript] = useState("");
+    const [isUploading, setIsUploading] = useState(false);
+    const [isTranscribing, setIsTranscribing] = useState(false);
     const [apiBaseUrl, setApiBaseUrl] = useState(DEFAULT_API_BASE_URL);
 
     useEffect(() => {
@@ -38,6 +41,7 @@
     async function handleSubmit(event) {
       event.preventDefault();
       setResponse(null);
+      setTranscript("");
 
       if (!file) {
         setStatus("Please choose an audio file.");
@@ -49,6 +53,7 @@
 
       try {
         setStatus("Uploading...");
+        setIsUploading(true);
         const res = await fetch(`${apiBaseUrl}/upload`, {
           method: "POST",
           body: formData,
@@ -65,6 +70,38 @@
         setStatus("Upload complete.");
       } catch (error) {
         setStatus(error.message || "Something went wrong.");
+      } finally {
+        setIsUploading(false);
+      }
+    }
+
+    async function handleTranscribe() {
+      if (!response || !response.file_key) {
+        setStatus("Upload an audio file before transcribing.");
+        return;
+      }
+
+      try {
+        setStatus("Transcribing...");
+        setIsTranscribing(true);
+        const res = await fetch(
+          `${apiBaseUrl}/transcribe/${response.file_key}`,
+          { method: "POST" }
+        );
+
+        if (!res.ok) {
+          const errorPayload = await res.json().catch(() => ({}));
+          const detail = errorPayload.detail || "Transcription failed";
+          throw new Error(detail);
+        }
+
+        const payload = await res.json();
+        setTranscript(payload.transcript || "");
+        setStatus("Transcription complete.");
+      } catch (error) {
+        setStatus(error.message || "Something went wrong.");
+      } finally {
+        setIsTranscribing(false);
       }
     }
 
@@ -90,8 +127,22 @@
           }),
           React.createElement(
             "button",
-            { type: "submit" },
-            "Upload"
+            { type: "submit", disabled: isUploading },
+            isUploading ? "Uploading..." : "Upload"
+          )
+        ),
+        React.createElement(
+          "div",
+          { className: "actions" },
+          React.createElement(
+            "button",
+            {
+              type: "button",
+              onClick: handleTranscribe,
+              disabled: !response || isTranscribing,
+              className: "secondary",
+            },
+            isTranscribing ? "Transcribing..." : "Transcribe"
           )
         ),
         status
@@ -107,7 +158,22 @@
               { className: "response" },
               JSON.stringify(response, null, 2)
             )
-          : null
+          : null,
+        React.createElement(
+          "div",
+          { className: "transcript" },
+          React.createElement(
+            "label",
+            { htmlFor: "transcript-box" },
+            "Transcript"
+          ),
+          React.createElement("textarea", {
+            id: "transcript-box",
+            placeholder: "Transcript will appear here after processing.",
+            value: transcript,
+            readOnly: true,
+          })
+        )
       )
     );
   }

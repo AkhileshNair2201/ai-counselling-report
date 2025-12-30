@@ -4,9 +4,11 @@ from pathlib import Path
 from uuid import uuid4
 
 from fastapi import HTTPException, UploadFile
+from sqlalchemy import select
 
 from server.models.audio import AudioFile
 from server.models.database import SessionLocal
+from server.agents.transcription_agent import TranscriptionAgent
 
 UPLOAD_DIR = Path(__file__).resolve().parent.parent / "uploads"
 ALLOWED_CONTENT_TYPES = {
@@ -52,3 +54,29 @@ async def save_audio(file: UploadFile) -> dict[str, str]:
         "path": str(destination.relative_to(Path.cwd())),
         "content_type": file.content_type or "",
     }
+
+
+def _resolve_audio_path(file_key: str) -> Path:
+    matching = next(UPLOAD_DIR.glob(f"{file_key}*"), None)
+    if matching is None:
+        raise HTTPException(status_code=404, detail="Audio file not found on disk")
+    return matching
+
+
+def transcribe_audio(file_key: str) -> dict[str, str]:
+    with SessionLocal() as session:
+        result = session.execute(
+            select(AudioFile).where(AudioFile.file_key == file_key)
+        ).scalar_one_or_none()
+        if result is None:
+            raise HTTPException(status_code=404, detail="Audio file not found")
+
+    audio_path = _resolve_audio_path(file_key)
+    try:
+        agent = TranscriptionAgent.from_env()
+    except ValueError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    transcript = agent.transcribe(audio_path)
+
+    return {"file_key": file_key, "transcript": transcript}
