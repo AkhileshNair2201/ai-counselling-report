@@ -10,6 +10,7 @@ from sqlalchemy import func, select
 from server.models.audio import AudioFile
 from server.models.transcript import Transcript
 from server.models.database import SessionLocal
+from server.agents.diarization_agent import DiarizationAgent
 from server.agents.transcription_agent import TranscriptionAgent
 
 UPLOAD_DIR = Path(__file__).resolve().parent.parent / "uploads"
@@ -160,6 +161,7 @@ def list_transcripts(page: int, page_size: int) -> dict[str, object]:
                 "content_type": audio.content_type,
                 "duration_seconds": duration,
                 "transcript_available": True,
+                "diarization_available": bool(transcript.diarized_segments),
             }
         )
 
@@ -186,4 +188,54 @@ def get_transcript_segments(file_key: str) -> dict[str, object]:
         "file_key": audio.file_key,
         "text": transcript.text,
         "segments": transcript.segments or [],
+    }
+
+
+def diarize_audio(file_key: str) -> dict[str, object]:
+    with SessionLocal() as session:
+        result = session.execute(
+            select(AudioFile).where(AudioFile.file_key == file_key)
+        ).scalar_one_or_none()
+        if result is None:
+            raise HTTPException(status_code=404, detail="Audio file not found")
+
+    audio_path = _resolve_audio_path(file_key)
+    try:
+        agent = DiarizationAgent.from_env()
+    except ValueError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    diarization_payload = agent.diarize(audio_path, result.content_type)
+    diarized_text = str(diarization_payload.get("text", ""))
+    diarized_segments = diarization_payload.get("segments", [])
+
+    with SessionLocal() as session:
+        existing = session.execute(
+            select(Transcript).where(Transcript.audio_file_id == result.id)
+        ).scalar_one_or_none()
+        if existing is None:
+            record = Transcript(
+                audio_file_id=result.id,
+                text=diarized_text,
+                diarized_text=diarized_text,
+                diarized_segments=diarized_segments,
+            )
+            session.add(record)
+        else:
+            existing.diarized_text = diarized_text
+            existing.diarized_segments = diarized_segments
+            if not existing.text:
+                existing.text = diarized_text
+            existing.updated_at = datetime.utcnow()
+
+        session.commit()
+
+        stored = session.execute(
+            select(Transcript).where(Transcript.audio_file_id == result.id)
+        ).scalar_one()
+
+    return {
+        "file_key": file_key,
+        "text": stored.diarized_text or "",
+        "segments": stored.diarized_segments or [],
     }

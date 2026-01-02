@@ -3,6 +3,48 @@
   font-family: "DM Sans", "Trebuchet MS", sans-serif;
   background: radial-gradient(circle at top, #fff7e6, #f1efe8 55%, #e9ece7);
   color: #1a1a1a;
+  --page-bg: radial-gradient(circle at top, #fff7e6, #f1efe8 55%, #e9ece7);
+  --card-bg: rgba(255, 255, 255, 0.9);
+  --text-primary: #1a1a1a;
+  --text-muted: #4a4a4a;
+  --surface-border: #cfd3d6;
+  --status-bg: #f2f4ff;
+  --status-text: #2c357a;
+  --response-bg: #0f172a;
+  --response-text: #e2e8f0;
+  --primary-bg: #1f4ed8;
+  --primary-text: #ffffff;
+  --secondary-bg: #0f766e;
+  --secondary-text: #ffffff;
+  --ghost-bg: #e2e8f0;
+  --ghost-text: #0f172a;
+  --table-border: #e5e7eb;
+  --table-head: #374151;
+  --modal-backdrop: rgba(15, 23, 42, 0.55);
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  background: radial-gradient(circle at top, #0f172a, #020617 60%, #000);
+  color: #e2e8f0;
+  --page-bg: radial-gradient(circle at top, #0f172a, #020617 60%, #000);
+  --card-bg: rgba(15, 23, 42, 0.92);
+  --text-primary: #e2e8f0;
+  --text-muted: #94a3b8;
+  --surface-border: #1e293b;
+  --status-bg: rgba(30, 41, 59, 0.7);
+  --status-text: #e2e8f0;
+  --response-bg: #0b1120;
+  --response-text: #e2e8f0;
+  --primary-bg: #2563eb;
+  --primary-text: #ffffff;
+  --secondary-bg: #14b8a6;
+  --secondary-text: #082f2a;
+  --ghost-bg: rgba(148, 163, 184, 0.2);
+  --ghost-text: #e2e8f0;
+  --table-border: #1e293b;
+  --table-head: #cbd5f5;
+  --modal-backdrop: rgba(2, 6, 23, 0.75);
 }
 
 * {
@@ -15,6 +57,8 @@ body {
   display: grid;
   place-items: center;
   padding: 32px 16px;
+  background: var(--page-bg);
+  color: var(--text-primary);
 }
 
 .page {
@@ -22,7 +66,7 @@ body {
 }
 
 .card {
-  background: rgba(255, 255, 255, 0.9);
+  background: var(--card-bg);
   border-radius: 24px;
   padding: 32px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
@@ -36,7 +80,7 @@ h1 {
 
 .subtitle {
   margin: 0 0 24px;
-  color: #4a4a4a;
+  color: var(--text-muted);
 }
 
 .form {
@@ -48,6 +92,7 @@ h1 {
   margin-top: 16px;
   display: flex;
   justify-content: flex-start;
+  gap: 12px;
 }
 
 .nav {
@@ -58,29 +103,31 @@ h1 {
 
 input[type="file"] {
   padding: 12px;
-  border: 1px solid #cfd3d6;
+  border: 1px solid var(--surface-border);
   border-radius: 12px;
-  background: #fff;
+  background: transparent;
+  color: inherit;
 }
 
 button {
   border: none;
   border-radius: 999px;
   padding: 12px 24px;
-  background: #1f4ed8;
-  color: #fff;
+  background: var(--primary-bg);
+  color: var(--primary-text);
   font-size: 1rem;
   cursor: pointer;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 button.secondary {
-  background: #0f766e;
+  background: var(--secondary-bg);
+  color: var(--secondary-text);
 }
 
 button.ghost {
-  background: #e2e8f0;
-  color: #0f172a;
+  background: var(--ghost-bg);
+  color: var(--ghost-text);
 }
 
 button:disabled {
@@ -99,16 +146,16 @@ button:hover {
   margin-top: 16px;
   padding: 12px 16px;
   border-radius: 12px;
-  background: #f2f4ff;
-  color: #2c357a;
+  background: var(--status-bg);
+  color: var(--status-text);
 }
 
 .response {
   margin-top: 16px;
   padding: 16px;
   border-radius: 12px;
-  background: #0f172a;
-  color: #e2e8f0;
+  background: var(--response-bg);
+  color: var(--response-text);
   font-size: 0.9rem;
   overflow-x: auto;
 }
@@ -121,7 +168,7 @@ button:hover {
 
 .transcript label {
   font-weight: 600;
-  color: #1f2937;
+  color: var(--text-primary);
 }
 
 .transcript textarea {
@@ -130,10 +177,11 @@ button:hover {
   resize: vertical;
   padding: 12px;
   border-radius: 12px;
-  border: 1px solid #cfd3d6;
+  border: 1px solid var(--surface-border);
   font-family: "DM Sans", "Trebuchet MS", sans-serif;
   font-size: 0.95rem;
-  background: #fff;
+  background: transparent;
+  color: inherit;
 }
 
 .list {
@@ -152,11 +200,11 @@ button:hover {
 .table td {
   padding: 12px;
   text-align: left;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--table-border);
 }
 
 .table th {
-  color: #374151;
+  color: var(--table-head);
   font-weight: 600;
 }
 
@@ -167,13 +215,13 @@ button:hover {
 }
 
 .page-meta {
-  color: #4b5563;
+  color: var(--text-muted);
 }
 
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(15, 23, 42, 0.55);
+  background: var(--modal-backdrop);
   display: grid;
   place-items: center;
   padding: 24px;
@@ -182,7 +230,7 @@ button:hover {
 
 .modal {
   width: min(720px, 100%);
-  background: #fff;
+  background: var(--card-bg);
   border-radius: 16px;
   padding: 20px;
   box-shadow: 0 20px 60px rgba(15, 23, 42, 0.3);

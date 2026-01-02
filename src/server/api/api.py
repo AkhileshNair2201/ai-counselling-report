@@ -6,6 +6,7 @@ from fastapi import APIRouter, File, UploadFile
 
 from server.config import get_api_base_url
 from server.services.services import (
+    diarize_audio,
     get_transcript_segments,
     list_transcripts,
     save_audio,
@@ -23,6 +24,11 @@ async def upload_audio(file: UploadFile = File(...)) -> dict[str, str]:
 @router.post("/transcribe/{file_key}")
 async def transcribe_uploaded_audio(file_key: str) -> dict[str, object]:
     return await asyncio.to_thread(transcribe_audio, file_key)
+
+
+@router.post("/diarize/{file_key}")
+async def diarize_uploaded_audio(file_key: str) -> dict[str, object]:
+    return await asyncio.to_thread(diarize_audio, file_key)
 
 
 @router.get("/transcripts")

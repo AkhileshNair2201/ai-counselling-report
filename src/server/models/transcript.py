@@ -17,6 +17,10 @@ class Transcript(Base):
     )
     text: Mapped[str] = mapped_column(Text)
     segments: Mapped[list[dict[str, object]]] = mapped_column(JSON, nullable=True)
+    diarized_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    diarized_segments: Mapped[list[dict[str, object]] | None] = mapped_column(
+        JSON, nullable=True
+    )
     duration_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

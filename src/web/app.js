@@ -9,6 +9,7 @@
     const [transcript, setTranscript] = useState("");
     const [isUploading, setIsUploading] = useState(false);
     const [isTranscribing, setIsTranscribing] = useState(false);
+    const [isDiarizing, setIsDiarizing] = useState(false);
     const [apiBaseUrl, setApiBaseUrl] = useState(DEFAULT_API_BASE_URL);
     const [view, setView] = useState("upload");
     const [listData, setListData] = useState([]);
@@ -19,9 +20,14 @@
     const [modalOpen, setModalOpen] = useState(false);
     const [modalSegments, setModalSegments] = useState([]);
     const [modalTitle, setModalTitle] = useState("");
+    const [theme, setTheme] = useState("light");
 
     useEffect(() => {
       let isMounted = true;
+      const storedTheme = localStorage.getItem("theme");
+      if (storedTheme === "dark" || storedTheme === "light") {
+        setTheme(storedTheme);
+      }
 
       async function loadEnv() {
         try {
@@ -46,6 +52,11 @@
         isMounted = false;
       };
     }, []);
+
+    useEffect(() => {
+      document.documentElement.setAttribute("data-theme", theme);
+      localStorage.setItem("theme", theme);
+    }, [theme]);
 
     useEffect(() => {
       if (view !== "list") {
@@ -135,15 +146,16 @@
       if (!Array.isArray(segments) || segments.length === 0) {
         return "";
       }
-      return segments
-        .map((segment) => {
-          const text = segment.text || "";
-          const timestamp = segment.timestamp || {};
-          const start = formatTimestamp(timestamp.start);
-          const end = formatTimestamp(timestamp.end);
-          return `${start}-${end} : ${text}`.trim();
-        })
-        .join("\n");
+        return segments
+          .map((segment) => {
+            const text = segment.text || "";
+            const timestamp = segment.timestamp || {};
+            const start = formatTimestamp(timestamp.start);
+            const end = formatTimestamp(timestamp.end);
+            const speaker = segment.speaker ? `${segment.speaker} ` : "";
+            return `${start}-${end} : ${speaker}${text}`.trim();
+          })
+          .join("\n");
     }
 
     async function handleTranscribe() {
@@ -174,6 +186,36 @@
         setStatus(error.message || "Something went wrong.");
       } finally {
         setIsTranscribing(false);
+      }
+    }
+
+    async function handleDiarize() {
+      if (!response || !response.file_key) {
+        setStatus("Upload an audio file before diarizing.");
+        return;
+      }
+
+      try {
+        setStatus("Diarizing...");
+        setIsDiarizing(true);
+        const res = await fetch(`${apiBaseUrl}/diarize/${response.file_key}`, {
+          method: "POST",
+        });
+
+        if (!res.ok) {
+          const errorPayload = await res.json().catch(() => ({}));
+          const detail = errorPayload.detail || "Diarization failed";
+          throw new Error(detail);
+        }
+
+        const payload = await res.json();
+        const formatted = formatSegments(payload.segments);
+        setTranscript(formatted || payload.text || "");
+        setStatus("Diarization complete.");
+      } catch (error) {
+        setStatus(error.message || "Something went wrong.");
+      } finally {
+        setIsDiarizing(false);
       }
     }
 
@@ -231,6 +273,15 @@
             onClick: () => setView("list"),
           },
           "Recordings"
+        ),
+        React.createElement(
+          "button",
+          {
+            type: "button",
+            className: "ghost",
+            onClick: () => setTheme(theme === "dark" ? "light" : "dark"),
+          },
+          theme === "dark" ? "Light mode" : "Dark mode"
         )
       ),
       React.createElement(
@@ -278,6 +329,16 @@
                     className: "secondary",
                   },
                   isTranscribing ? "Transcribing..." : "Transcribe"
+                ),
+                React.createElement(
+                  "button",
+                  {
+                    type: "button",
+                    onClick: handleDiarize,
+                    disabled: !response || isDiarizing,
+                    className: "ghost",
+                  },
+                  isDiarizing ? "Diarizing..." : "Diarize"
                 )
               )
             )
