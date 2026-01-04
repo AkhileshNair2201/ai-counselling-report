@@ -69,7 +69,7 @@ def get_assemblyai_api_key() -> str:
 
 
 def get_assemblyai_base_url() -> str:
-    return os.getenv("ASSEMBLYAI_BASE_URL", "https://api.assemblyai.com/v2")
+    return os.getenv("ASSEMBLYAI_BASE_URL", "https://api.assemblyai.com")
 
 
 def get_assemblyai_max_retries() -> int:

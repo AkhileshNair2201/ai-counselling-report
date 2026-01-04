@@ -35,6 +35,8 @@ class DiarizationAgent(BaseModel):
     def from_env(cls) -> "DiarizationAgent":
         api_key = get_assemblyai_api_key()
         base_url = get_assemblyai_base_url().rstrip("/")
+        if base_url.endswith("/v2"):
+            base_url = base_url[: -len("/v2")]
         max_retries = get_assemblyai_max_retries()
         retry_delay_seconds = get_assemblyai_retry_delay_seconds()
         if not api_key:
@@ -51,8 +53,8 @@ class DiarizationAgent(BaseModel):
             raise FileNotFoundError(f"Audio file not found: {file_path}")
 
         aai.settings.api_key = self.api_key
-        if hasattr(aai.settings, "api_url"):
-            aai.settings.api_url = self.base_url
+        if hasattr(aai.settings, "base_url"):
+            aai.settings.base_url = self.base_url
 
         config = aai.TranscriptionConfig(
             speech_models=["universal"],

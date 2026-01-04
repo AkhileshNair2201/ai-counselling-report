@@ -208,6 +208,11 @@ def diarize_audio(file_key: str) -> dict[str, object]:
     diarization_payload = agent.diarize(audio_path, result.content_type)
     diarized_text = str(diarization_payload.get("text", ""))
     diarized_segments = diarization_payload.get("segments", [])
+    duration_seconds = (
+        _calculate_duration_seconds(diarized_segments)
+        if isinstance(diarized_segments, list)
+        else None
+    )
 
     with SessionLocal() as session:
         existing = session.execute(
@@ -217,15 +222,19 @@ def diarize_audio(file_key: str) -> dict[str, object]:
             record = Transcript(
                 audio_file_id=result.id,
                 text=diarized_text,
+                segments=diarized_segments,
                 diarized_text=diarized_text,
                 diarized_segments=diarized_segments,
+                duration_seconds=duration_seconds,
             )
             session.add(record)
         else:
             existing.diarized_text = diarized_text
             existing.diarized_segments = diarized_segments
+            existing.segments = diarized_segments
             if not existing.text:
                 existing.text = diarized_text
+            existing.duration_seconds = duration_seconds
             existing.updated_at = datetime.utcnow()
 
         session.commit()
