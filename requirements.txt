@@ -8,3 +8,4 @@ alembic
 openai
 langchain-openai
 assemblyai
+qdrant-client

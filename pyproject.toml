@@ -17,6 +17,7 @@ dependencies = [
   "alembic",
   "langchain-openai",
   "assemblyai",
+  "qdrant-client",
 ]
 
 [tool.setuptools]

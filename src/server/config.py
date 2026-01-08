@@ -64,6 +64,10 @@ def get_openai_transcription_model() -> str:
     return os.getenv("OPENAI_TRANSCRIPTION_MODEL", "whisper-1")
 
 
+def get_openai_embedding_model() -> str:
+    return os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
+
+
 def get_assemblyai_api_key() -> str:
     return os.getenv("ASSEMBLYAI_API_KEY", "")
 
@@ -78,3 +82,16 @@ def get_assemblyai_max_retries() -> int:
 
 def get_assemblyai_retry_delay_seconds() -> float:
     return _get_float("ASSEMBLYAI_RETRY_DELAY_SECONDS", 2.0)
+
+
+def get_qdrant_url() -> str:
+    return os.getenv("QDRANT_URL", "http://localhost:6333")
+
+
+def get_qdrant_api_key() -> str | None:
+    api_key = os.getenv("QDRANT_API_KEY", "").strip()
+    return api_key or None
+
+
+def get_qdrant_collection() -> str:
+    return os.getenv("QDRANT_COLLECTION", "transcripts")

@@ -19,6 +19,17 @@ Set `OPENAI_API_KEY` in `.env` (placeholder is already there), then call:
 curl -X POST http://127.0.0.1:8000/api/v1/transcribe/<file_key>
 ```
 
+## Vector Indexing (Qdrant)
+
+The transcript is embedded after it is stored in Postgres and upserted into Qdrant.
+Configure in `.env` as needed:
+
+```bash
+QDRANT_URL=http://localhost:6333
+QDRANT_COLLECTION=transcripts
+OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+```
+
 ## UI (React)
 
 ```bash

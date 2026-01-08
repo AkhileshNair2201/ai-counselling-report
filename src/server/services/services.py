@@ -12,6 +12,7 @@ from server.models.transcript import Transcript
 from server.models.database import SessionLocal
 from server.agents.diarization_agent import DiarizationAgent
 from server.agents.transcription_agent import TranscriptionAgent
+from server.services.vector_store import upsert_transcript_vector
 
 UPLOAD_DIR = Path(__file__).resolve().parent.parent / "uploads"
 ALLOWED_CONTENT_TYPES = {
@@ -80,6 +81,31 @@ def _calculate_duration_seconds(segments: list[dict[str, object]]) -> float | No
     return float(max_end) if max_end is not None else None
 
 
+def _index_transcript(
+    *,
+    transcript_id: int,
+    file_key: str,
+    text: str,
+    segments: list[dict[str, object]] | None,
+    diarized: bool,
+) -> None:
+    try:
+        upsert_transcript_vector(
+            transcript_id=transcript_id,
+            file_key=file_key,
+            text=text,
+            segments=segments,
+            diarized=diarized,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Vector indexing failed: {exc}",
+        ) from exc
+
+
 def transcribe_audio(file_key: str) -> dict[str, object]:
     with SessionLocal() as session:
         result = session.execute(
@@ -126,6 +152,14 @@ def transcribe_audio(file_key: str) -> dict[str, object]:
         stored = session.execute(
             select(Transcript).where(Transcript.audio_file_id == result.id)
         ).scalar_one()
+
+    _index_transcript(
+        transcript_id=stored.id,
+        file_key=file_key,
+        text=stored.text or "",
+        segments=stored.segments,
+        diarized=False,
+    )
 
     return {
         "file_key": file_key,
@@ -242,6 +276,14 @@ def diarize_audio(file_key: str) -> dict[str, object]:
         stored = session.execute(
             select(Transcript).where(Transcript.audio_file_id == result.id)
         ).scalar_one()
+
+    _index_transcript(
+        transcript_id=stored.id,
+        file_key=file_key,
+        text=(stored.diarized_text or stored.text or ""),
+        segments=stored.diarized_segments or stored.segments,
+        diarized=True,
+    )
 
     return {
         "file_key": file_key,
