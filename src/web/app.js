@@ -340,6 +340,35 @@
                   },
                   isDiarizing ? "Diarizing..." : "Diarize"
                 )
+              ),
+              status
+                ? React.createElement(
+                    "div",
+                    { className: "status" },
+                    status
+                  )
+                : null,
+              response
+                ? React.createElement(
+                    "pre",
+                    { className: "response" },
+                    JSON.stringify(response, null, 2)
+                  )
+                : null,
+              React.createElement(
+                "div",
+                { className: "transcript" },
+                React.createElement(
+                  "label",
+                  { htmlFor: "transcript-box" },
+                  "Transcript"
+                ),
+                React.createElement("textarea", {
+                  id: "transcript-box",
+                  placeholder: "Transcript will appear here after processing.",
+                  value: transcript,
+                  readOnly: true,
+                })
               )
             )
           : React.createElement(
@@ -465,35 +494,11 @@
                 )
               )
             ),
-        status
+        view === "list" && status
           ? React.createElement(
               "div",
               { className: "status" },
               status
-            )
-          : null,
-        view === "upload" && response
-          ? React.createElement(
-              "pre",
-              { className: "response" },
-              JSON.stringify(response, null, 2)
-            )
-          : null,
-        view === "upload"
-          ? React.createElement(
-              "div",
-              { className: "transcript" },
-              React.createElement(
-                "label",
-                { htmlFor: "transcript-box" },
-                "Transcript"
-              ),
-              React.createElement("textarea", {
-                id: "transcript-box",
-                placeholder: "Transcript will appear here after processing.",
-                value: transcript,
-                readOnly: true,
-              })
             )
           : null,
         modalOpen

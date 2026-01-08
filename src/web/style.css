@@ -59,10 +59,15 @@ body {
   padding: 32px 16px;
   background: var(--page-bg);
   color: var(--text-primary);
+  overflow-y: scroll;
 }
 
 .page {
-  width: min(640px, 100%);
+  width: min(960px, 100%);
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: stretch;
 }
 
 .card {
@@ -71,6 +76,9 @@ body {
   padding: 32px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
   backdrop-filter: blur(6px);
+  height: min(72vh, 680px);
+  overflow-y: auto;
+  width: 100%;
 }
 
 h1 {
@@ -99,6 +107,8 @@ h1 {
   display: flex;
   gap: 12px;
   margin-bottom: 16px;
+  width: 100%;
+  justify-content: center;
 }
 
 input[type="file"] {
@@ -253,4 +263,15 @@ button:hover {
   margin: 0;
   white-space: pre-wrap;
   font-family: "DM Sans", "Trebuchet MS", sans-serif;
+}
+
+@media (max-width: 720px) {
+  .page {
+    width: min(100%, 100%);
+  }
+
+  .card {
+    height: auto;
+    padding: 24px;
+  }
 }
