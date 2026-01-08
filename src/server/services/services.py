@@ -360,6 +360,7 @@ def list_sessions(page: int, page_size: int) -> dict[str, object]:
                 "session_date": session_row.session_date.isoformat()
                 if session_row.session_date
                 else None,
+                "file_key": audio.file_key,
                 "content_type": audio.content_type,
                 "duration_seconds": duration,
                 "transcript_available": bool(transcript),

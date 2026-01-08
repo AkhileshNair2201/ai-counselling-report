@@ -224,6 +224,34 @@ button:hover {
   gap: 12px;
 }
 
+.action-menu {
+  position: relative;
+  display: inline-flex;
+  justify-content: flex-start;
+}
+
+.menu-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  min-width: 150px;
+  background: var(--card-bg);
+  border: 1px solid var(--surface-border);
+  border-radius: 12px;
+  box-shadow: 0 16px 30px rgba(15, 23, 42, 0.18);
+  z-index: 5;
+}
+
+.menu-panel button {
+  width: 100%;
+  justify-content: center;
+  padding: 8px 14px;
+  font-size: 0.9rem;
+}
+
 .page-meta {
   color: var(--text-muted);
 }

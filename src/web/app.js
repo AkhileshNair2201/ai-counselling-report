@@ -23,6 +23,7 @@
     const [modalOpen, setModalOpen] = useState(false);
     const [modalContent, setModalContent] = useState("");
     const [modalTitle, setModalTitle] = useState("");
+    const [openMenuSessionId, setOpenMenuSessionId] = useState(null);
     const [theme, setTheme] = useState("light");
 
     useEffect(() => {
@@ -298,10 +299,38 @@
       }
     }
 
+    async function handleViewTranscript(item) {
+      if (!item.file_key) {
+        setStatus("Transcript unavailable for this session.");
+        return;
+      }
+
+      try {
+        setStatus("");
+        const res = await fetch(`${apiBaseUrl}/transcripts/${item.file_key}`);
+        if (!res.ok) {
+          const errorPayload = await res.json().catch(() => ({}));
+          const detail = errorPayload.detail || "Failed to load transcript";
+          throw new Error(detail);
+        }
+        const payload = await res.json();
+        const formatted = formatSegments(payload.segments || []);
+        setModalContent(formatted || payload.text || "");
+        setModalTitle(item.title || "Session Transcript");
+        setModalOpen(true);
+      } catch (error) {
+        setStatus(error.message || "Something went wrong.");
+      }
+    }
+
     function closeModal() {
       setModalOpen(false);
       setModalContent("");
       setModalTitle("");
+    }
+
+    function toggleMenu(sessionId) {
+      setOpenMenuSessionId((current) => (current === sessionId ? null : sessionId));
     }
 
     function formatDuration(value) {
@@ -532,15 +561,54 @@
                           React.createElement(
                             "td",
                             null,
-                            item.notes_available
+                            item.transcript_available || item.notes_available
                               ? React.createElement(
-                                  "button",
-                                  {
-                                    type: "button",
-                                    className: "ghost",
-                                    onClick: () => handleViewNotes(item),
-                                  },
-                                  "View"
+                                  "div",
+                                  { className: "action-menu" },
+                                  React.createElement(
+                                    "button",
+                                    {
+                                      type: "button",
+                                      className: "ghost",
+                                      onClick: () =>
+                                        toggleMenu(item.session_id),
+                                    },
+                                    "View"
+                                  ),
+                                  openMenuSessionId === item.session_id
+                                    ? React.createElement(
+                                        "div",
+                                        { className: "menu-panel" },
+                                        item.transcript_available
+                                          ? React.createElement(
+                                              "button",
+                                              {
+                                                type: "button",
+                                                className: "ghost",
+                                                onClick: () => {
+                                                  handleViewTranscript(item);
+                                                  setOpenMenuSessionId(null);
+                                                },
+                                              },
+                                              "Transcript"
+                                            )
+                                          : null,
+                                        item.notes_available
+                                          ? React.createElement(
+                                              "button",
+                                              {
+                                                type: "button",
+                                                className: "ghost",
+                                                onClick: () => {
+                                                  handleViewNotes(item);
+                                                  setOpenMenuSessionId(null);
+                                                },
+                                              },
+                                              "Notes"
+                                            )
+                                          : null
+                                      )
+                                    : null
                                 )
                               : "—"
                           )
