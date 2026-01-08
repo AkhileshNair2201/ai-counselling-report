@@ -16,6 +16,7 @@ from server.agents.diarization_agent import DiarizationAgent
 from server.agents.notes_agent import NotesAgent
 from server.agents.transcription_agent import TranscriptionAgent
 from server.services.vector_store import upsert_session_note_vector, upsert_transcript_vector
+from server.core.celery_app import celery_app
 
 UPLOAD_DIR = Path(__file__).resolve().parent.parent / "uploads"
 ALLOWED_CONTENT_TYPES = {
@@ -642,3 +643,19 @@ def get_session_notes(session_id: int) -> dict[str, object]:
         "model": note.model,
         "version": note.version,
     }
+
+
+def enqueue_chunked_processing(session_id: int) -> dict[str, object]:
+    with SessionLocal() as session:
+        exists = session.get(Session, session_id)
+        if exists is None:
+            raise HTTPException(status_code=404, detail="Session not found")
+        exists.status = "processing"
+        exists.updated_at = datetime.utcnow()
+        session.commit()
+
+    result = celery_app.send_task(
+        "server.tasks.session_processing.process_session_chunks",
+        args=[session_id],
+    )
+    return {"session_id": session_id, "task_id": result.id, "status": "processing"}

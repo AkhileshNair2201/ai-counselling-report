@@ -9,3 +9,5 @@ openai
 langchain-openai
 assemblyai
 qdrant-client
+celery
+redis

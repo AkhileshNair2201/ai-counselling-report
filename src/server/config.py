@@ -95,3 +95,15 @@ def get_qdrant_api_key() -> str | None:
 
 def get_qdrant_collection() -> str:
     return os.getenv("QDRANT_COLLECTION", "transcripts")
+
+
+def get_celery_broker_url() -> str:
+    return os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
+
+
+def get_celery_result_backend() -> str:
+    return os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
+
+
+def get_audio_chunk_seconds() -> int:
+    return _get_int("AUDIO_CHUNK_SECONDS", 600)

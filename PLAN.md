@@ -9,6 +9,12 @@ Turn counseling session audio recordings into clear, accurate, and well-structur
 - Qdrant for embeddings of structured notes.
 - React UI for session creation and session list + notes viewing.
 
+## New Requirement: Chunked Processing (Planned)
+Large audio files should be chunked and processed asynchronously. The new flow uses:
+- **FFmpeg** to split audio into ordered chunks.
+- **Celery** to process chunks in the background.
+- **Aggregation** to coalesce chunk transcripts/notes into a final session record.
+
 ## Database Schema
 ### `sessions`
 - `id` (int, PK)
@@ -51,6 +57,7 @@ Turn counseling session audio recordings into clear, accurate, and well-structur
 - `updated_at` (datetime)
 
 ## API Flow
+### Current
 1) `POST /sessions/upload` -> create session + audio.
 2) `POST /sessions/{session_id}/transcribe` -> generate transcript + segments.
 3) `POST /sessions/{session_id}/diarize` -> add speaker labels (optional).
@@ -59,10 +66,26 @@ Turn counseling session audio recordings into clear, accurate, and well-structur
 6) `GET /sessions/{session_id}` -> session detail.
 7) `GET /sessions/{session_id}/notes` -> structured notes payload.
 
+### Planned (Chunked + Background)
+1) `POST /sessions/upload` -> create session + audio.
+2) Enqueue Celery task: **chunk audio** with FFmpeg and store ordered chunks.
+3) Enqueue per-chunk Celery tasks:
+   - transcribe chunk
+   - diarize chunk (optional)
+4) Enqueue aggregation task:
+   - coalesce transcripts and diarization segments in order
+   - generate session notes from the merged transcript
+5) Store merged transcript + notes back into `transcripts` and `session_notes`.
+6) Index final notes into Qdrant.
+
 ## LLM / Agent Design
 - `NotesAgent` consumes transcript + diarization segments and outputs structured JSON notes.
 - Final note is stored in `session_notes` and indexed for retrieval.
 - Transcription/diarization agents remain upstream steps.
+
+### Planned Changes emphasized by chunking
+- Notes generation uses the **merged** transcript + diarized segments.
+- Chunk metadata must preserve ordering for deterministic coalescing.
 
 ## Vector Store
 - Indexes `session_notes.note_markdown` plus summary metadata.
@@ -72,6 +95,7 @@ Turn counseling session audio recordings into clear, accurate, and well-structur
 - "New Session" and "Sessions" navigation.
 - Upload view framed as counseling session note generation.
 - Session list shows notes availability and opens note detail in a modal.
+- Add a **"Process Large Audio"** button that triggers the chunked Celery workflow.
 
 ## Config / Runtime Dependencies (Unchanged)
 - Postgres via `.env`

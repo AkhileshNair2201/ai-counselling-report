@@ -8,6 +8,7 @@ from server.config import get_api_base_url
 from server.services.services import (
     diarize_audio,
     diarize_session,
+    enqueue_chunked_processing,
     generate_session_notes,
     get_session_detail,
     get_session_notes,
@@ -56,6 +57,11 @@ async def diarize_session_audio(session_id: int) -> dict[str, object]:
 @router.post("/sessions/{session_id}/notes")
 async def generate_notes(session_id: int) -> dict[str, object]:
     return await asyncio.to_thread(generate_session_notes, session_id)
+
+
+@router.post("/sessions/{session_id}/process-large")
+async def process_large_audio(session_id: int) -> dict[str, object]:
+    return await asyncio.to_thread(enqueue_chunked_processing, session_id)
 
 
 @router.get("/transcripts")

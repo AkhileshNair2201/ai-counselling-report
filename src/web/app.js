@@ -12,6 +12,7 @@
     const [isTranscribing, setIsTranscribing] = useState(false);
     const [isDiarizing, setIsDiarizing] = useState(false);
     const [isGeneratingNotes, setIsGeneratingNotes] = useState(false);
+    const [isProcessingLarge, setIsProcessingLarge] = useState(false);
     const [apiBaseUrl, setApiBaseUrl] = useState(DEFAULT_API_BASE_URL);
     const [view, setView] = useState("upload");
     const [listData, setListData] = useState([]);
@@ -253,6 +254,32 @@
       }
     }
 
+    async function handleProcessLarge() {
+      if (!sessionId) {
+        setStatus("Upload a session recording before processing.");
+        return;
+      }
+
+      try {
+        setStatus("Queueing chunked processing...");
+        setIsProcessingLarge(true);
+        const res = await fetch(
+          `${apiBaseUrl}/sessions/${sessionId}/process-large`,
+          { method: "POST" }
+        );
+        if (!res.ok) {
+          const errorPayload = await res.json().catch(() => ({}));
+          const detail = errorPayload.detail || "Chunked processing failed";
+          throw new Error(detail);
+        }
+        setStatus("Chunked processing started in the background.");
+      } catch (error) {
+        setStatus(error.message || "Something went wrong.");
+      } finally {
+        setIsProcessingLarge(false);
+      }
+    }
+
     async function handleViewNotes(item) {
       try {
         setStatus("");
@@ -394,6 +421,16 @@
                     className: "secondary",
                   },
                   isGeneratingNotes ? "Generating..." : "Generate Notes"
+                ),
+                React.createElement(
+                  "button",
+                  {
+                    type: "button",
+                    onClick: handleProcessLarge,
+                    disabled: !response || isProcessingLarge,
+                    className: "ghost",
+                  },
+                  isProcessingLarge ? "Queueing..." : "Process Large Audio"
                 )
               ),
               status
@@ -447,6 +484,7 @@
                     null,
                     React.createElement("th", null, "Session"),
                     React.createElement("th", null, "Date"),
+                    React.createElement("th", null, "Status"),
                     React.createElement("th", null, "Type"),
                     React.createElement("th", null, "Duration"),
                     React.createElement("th", null, "Notes"),
@@ -470,6 +508,11 @@
                             "td",
                             null,
                             formatSessionDate(item.session_date)
+                          ),
+                          React.createElement(
+                            "td",
+                            null,
+                            item.status || "—"
                           ),
                           React.createElement(
                             "td",
@@ -508,7 +551,7 @@
                         null,
                         React.createElement(
                           "td",
-                          { colSpan: 6 },
+                          { colSpan: 7 },
                           "No sessions available yet."
                         )
                       )

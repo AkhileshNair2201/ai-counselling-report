@@ -49,6 +49,22 @@ pgAdmin runs at `http://127.0.0.1:5050`.
 alembic upgrade head
 ```
 
+## Background Processing (Celery)
+
+Start Redis and the Celery worker for chunked processing:
+
+```bash
+docker-compose up -d redis
+PYTHONPATH=src celery -A server.core.celery_app.celery_app worker -l info
+```
+
+Install ffmpeg (required for audio chunking):
+
+```bash
+sudo apt-get update
+sudo apt-get install -y ffmpeg
+```
+
 Create a new migration:
 
 ```bash
