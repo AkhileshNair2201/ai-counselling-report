@@ -7,9 +7,11 @@
     const [status, setStatus] = useState("");
     const [response, setResponse] = useState(null);
     const [transcript, setTranscript] = useState("");
+    const [sessionId, setSessionId] = useState(null);
     const [isUploading, setIsUploading] = useState(false);
     const [isTranscribing, setIsTranscribing] = useState(false);
     const [isDiarizing, setIsDiarizing] = useState(false);
+    const [isGeneratingNotes, setIsGeneratingNotes] = useState(false);
     const [apiBaseUrl, setApiBaseUrl] = useState(DEFAULT_API_BASE_URL);
     const [view, setView] = useState("upload");
     const [listData, setListData] = useState([]);
@@ -18,7 +20,7 @@
     const [listPageSize, setListPageSize] = useState(10);
     const [isLoadingList, setIsLoadingList] = useState(false);
     const [modalOpen, setModalOpen] = useState(false);
-    const [modalSegments, setModalSegments] = useState([]);
+    const [modalContent, setModalContent] = useState("");
     const [modalTitle, setModalTitle] = useState("");
     const [theme, setTheme] = useState("light");
 
@@ -68,10 +70,10 @@
         try {
           setIsLoadingList(true);
           const res = await fetch(
-            `${apiBaseUrl}/transcripts?page=${listPage}&page_size=${listPageSize}`
+            `${apiBaseUrl}/sessions?page=${listPage}&page_size=${listPageSize}`
           );
           if (!res.ok) {
-            throw new Error("Failed to load transcripts");
+            throw new Error("Failed to load sessions");
           }
           const payload = await res.json();
           if (isMounted) {
@@ -82,7 +84,7 @@
           }
         } catch (error) {
           if (isMounted) {
-            setStatus(error.message || "Failed to load transcripts.");
+            setStatus(error.message || "Failed to load sessions.");
           }
         } finally {
           if (isMounted) {
@@ -102,6 +104,7 @@
       event.preventDefault();
       setResponse(null);
       setTranscript("");
+      setSessionId(null);
 
       if (!file) {
         setStatus("Please choose an audio file.");
@@ -114,7 +117,7 @@
       try {
         setStatus("Uploading...");
         setIsUploading(true);
-        const res = await fetch(`${apiBaseUrl}/upload`, {
+        const res = await fetch(`${apiBaseUrl}/sessions/upload`, {
           method: "POST",
           body: formData,
         });
@@ -127,6 +130,7 @@
 
         const payload = await res.json();
         setResponse(payload);
+        setSessionId(payload.session_id || null);
         setStatus("Upload complete.");
       } catch (error) {
         setStatus(error.message || "Something went wrong.");
@@ -159,8 +163,8 @@
     }
 
     async function handleTranscribe() {
-      if (!response || !response.file_key) {
-        setStatus("Upload an audio file before transcribing.");
+      if (!sessionId) {
+        setStatus("Upload a session recording before transcribing.");
         return;
       }
 
@@ -168,7 +172,7 @@
         setStatus("Transcribing...");
         setIsTranscribing(true);
         const res = await fetch(
-          `${apiBaseUrl}/transcribe/${response.file_key}`,
+          `${apiBaseUrl}/sessions/${sessionId}/transcribe`,
           { method: "POST" }
         );
 
@@ -190,17 +194,20 @@
     }
 
     async function handleDiarize() {
-      if (!response || !response.file_key) {
-        setStatus("Upload an audio file before diarizing.");
+      if (!sessionId) {
+        setStatus("Upload a session recording before diarizing.");
         return;
       }
 
       try {
         setStatus("Diarizing...");
         setIsDiarizing(true);
-        const res = await fetch(`${apiBaseUrl}/diarize/${response.file_key}`, {
-          method: "POST",
-        });
+        const res = await fetch(
+          `${apiBaseUrl}/sessions/${sessionId}/diarize`,
+          {
+            method: "POST",
+          }
+        );
 
         if (!res.ok) {
           const errorPayload = await res.json().catch(() => ({}));
@@ -219,18 +226,45 @@
       }
     }
 
-    async function handleViewTranscript(item) {
+    async function handleGenerateNotes() {
+      if (!sessionId) {
+        setStatus("Upload a session recording before generating notes.");
+        return;
+      }
+
       try {
-        setStatus("");
-        const res = await fetch(`${apiBaseUrl}/transcripts/${item.file_key}`);
+        setStatus("Generating notes...");
+        setIsGeneratingNotes(true);
+        const res = await fetch(`${apiBaseUrl}/sessions/${sessionId}/notes`, {
+          method: "POST",
+        });
         if (!res.ok) {
           const errorPayload = await res.json().catch(() => ({}));
-          const detail = errorPayload.detail || "Failed to load transcript";
+          const detail = errorPayload.detail || "Notes generation failed";
           throw new Error(detail);
         }
         const payload = await res.json();
-        setModalSegments(payload.segments || []);
-        setModalTitle(item.original_filename || item.file_key);
+        setTranscript(payload.note_markdown || "");
+        setStatus("Session notes ready.");
+      } catch (error) {
+        setStatus(error.message || "Something went wrong.");
+      } finally {
+        setIsGeneratingNotes(false);
+      }
+    }
+
+    async function handleViewNotes(item) {
+      try {
+        setStatus("");
+        const res = await fetch(`${apiBaseUrl}/sessions/${item.session_id}/notes`);
+        if (!res.ok) {
+          const errorPayload = await res.json().catch(() => ({}));
+          const detail = errorPayload.detail || "Failed to load notes";
+          throw new Error(detail);
+        }
+        const payload = await res.json();
+        setModalContent(payload.note_markdown || "");
+        setModalTitle(item.title || "Session Notes");
         setModalOpen(true);
       } catch (error) {
         setStatus(error.message || "Something went wrong.");
@@ -239,7 +273,7 @@
 
     function closeModal() {
       setModalOpen(false);
-      setModalSegments([]);
+      setModalContent("");
       setModalTitle("");
     }
 
@@ -248,6 +282,17 @@
         return "—";
       }
       return `${value.toFixed(2)}s`;
+    }
+
+    function formatSessionDate(value) {
+      if (!value) {
+        return "—";
+      }
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) {
+        return "—";
+      }
+      return date.toLocaleDateString();
     }
 
     return React.createElement(
@@ -263,7 +308,7 @@
             className: view === "upload" ? "secondary" : "ghost",
             onClick: () => setView("upload"),
           },
-          "Upload"
+          "New Session"
         ),
         React.createElement(
           "button",
@@ -272,7 +317,7 @@
             className: view === "list" ? "secondary" : "ghost",
             onClick: () => setView("list"),
           },
-          "Recordings"
+          "Sessions"
         ),
         React.createElement(
           "button",
@@ -290,14 +335,14 @@
         React.createElement(
           "h1",
           null,
-          view === "upload" ? "Audio Upload" : "Recordings"
+          view === "upload" ? "Counseling Session Notes" : "Sessions"
         ),
         React.createElement(
           "p",
           { className: "subtitle" },
           view === "upload"
-            ? "Send an audio file to the FastAPI /upload endpoint."
-            : "Browse recordings that have been transcribed."
+            ? "Upload a counseling session recording to generate a clear, structured note."
+            : "Browse past sessions and their generated notes."
         ),
         view === "upload"
           ? React.createElement(
@@ -314,7 +359,7 @@
                 React.createElement(
                   "button",
                   { type: "submit", disabled: isUploading },
-                  isUploading ? "Uploading..." : "Upload"
+                  isUploading ? "Uploading..." : "Upload Session Audio"
                 )
               ),
               React.createElement(
@@ -324,11 +369,11 @@
                   "button",
                   {
                     type: "button",
-                    onClick: handleTranscribe,
-                    disabled: !response || isTranscribing,
-                    className: "secondary",
+                      onClick: handleTranscribe,
+                      disabled: !response || isTranscribing,
+                      className: "secondary",
                   },
-                  isTranscribing ? "Transcribing..." : "Transcribe"
+                  isTranscribing ? "Transcribing..." : "Draft Transcript"
                 ),
                 React.createElement(
                   "button",
@@ -338,7 +383,17 @@
                     disabled: !response || isDiarizing,
                     className: "ghost",
                   },
-                  isDiarizing ? "Diarizing..." : "Diarize"
+                  isDiarizing ? "Diarizing..." : "Add Speaker Labels"
+                ),
+                React.createElement(
+                  "button",
+                  {
+                    type: "button",
+                    onClick: handleGenerateNotes,
+                    disabled: !response || isGeneratingNotes,
+                    className: "secondary",
+                  },
+                  isGeneratingNotes ? "Generating..." : "Generate Notes"
                 )
               ),
               status
@@ -361,11 +416,11 @@
                 React.createElement(
                   "label",
                   { htmlFor: "transcript-box" },
-                  "Transcript"
+                  "Session Note Draft"
                 ),
                 React.createElement("textarea", {
                   id: "transcript-box",
-                  placeholder: "Transcript will appear here after processing.",
+                  placeholder: "Transcript and note draft will appear here after processing.",
                   value: transcript,
                   readOnly: true,
                 })
@@ -390,10 +445,11 @@
                   React.createElement(
                     "tr",
                     null,
-                    React.createElement("th", null, "File name"),
+                    React.createElement("th", null, "Session"),
+                    React.createElement("th", null, "Date"),
                     React.createElement("th", null, "Type"),
                     React.createElement("th", null, "Duration"),
-                    React.createElement("th", null, "Transcript"),
+                    React.createElement("th", null, "Notes"),
                     React.createElement("th", null, "Actions")
                   )
                 ),
@@ -408,7 +464,12 @@
                           React.createElement(
                             "td",
                             null,
-                            item.original_filename || item.file_key
+                            item.title || `Session ${item.session_id}`
+                          ),
+                          React.createElement(
+                            "td",
+                            null,
+                            formatSessionDate(item.session_date)
                           ),
                           React.createElement(
                             "td",
@@ -423,18 +484,18 @@
                           React.createElement(
                             "td",
                             null,
-                            item.transcript_available ? "Yes" : "No"
+                            item.notes_available ? "Yes" : "No"
                           ),
                           React.createElement(
                             "td",
                             null,
-                            item.transcript_available
+                            item.notes_available
                               ? React.createElement(
                                   "button",
                                   {
                                     type: "button",
                                     className: "ghost",
-                                    onClick: () => handleViewTranscript(item),
+                                    onClick: () => handleViewNotes(item),
                                   },
                                   "View"
                                 )
@@ -447,8 +508,8 @@
                         null,
                         React.createElement(
                           "td",
-                          { colSpan: 5 },
-                          "No transcripts available yet."
+                          { colSpan: 6 },
+                          "No sessions available yet."
                         )
                       )
                 )
@@ -514,7 +575,7 @@
                 React.createElement(
                   "div",
                   { className: "modal-header" },
-                  React.createElement("h2", null, modalTitle || "Transcript"),
+                  React.createElement("h2", null, modalTitle || "Session Notes"),
                   React.createElement(
                     "button",
                     { type: "button", className: "ghost", onClick: closeModal },
@@ -527,7 +588,7 @@
                   React.createElement(
                     "pre",
                     { className: "modal-content" },
-                    formatSegments(modalSegments)
+                    modalContent || "No notes available."
                   )
                 )
               )

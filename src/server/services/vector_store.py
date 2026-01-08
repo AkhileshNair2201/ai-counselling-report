@@ -91,3 +91,35 @@ def upsert_transcript_vector(
         payload=payload,
     )
     client.upsert(collection_name=collection_name, points=[point])
+
+
+def upsert_session_note_vector(
+    *,
+    session_id: int,
+    note_markdown: str,
+    summary: str | None,
+    version: str,
+) -> None:
+    cleaned_text = note_markdown.strip()
+    if not cleaned_text:
+        return
+
+    embeddings = _get_embeddings()
+    vector = embeddings.embed_query(cleaned_text)
+
+    collection_name = get_qdrant_collection()
+    client = _get_qdrant_client()
+    _ensure_collection(client, collection_name, len(vector))
+
+    payload = {
+        "session_id": session_id,
+        "summary": summary or "",
+        "version": version,
+        "type": "session_note",
+    }
+    point = qdrant_models.PointStruct(
+        id=session_id,
+        vector=vector,
+        payload=payload,
+    )
+    client.upsert(collection_name=collection_name, points=[point])

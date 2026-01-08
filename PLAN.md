@@ -1,13 +1,26 @@
-# Plan (Current State)
+# Plan (Counseling Session Notes Product)
 
-## Scope
-FastAPI backend for audio ingestion, transcription, diarization, and vector indexing, plus a lightweight React UI for uploads and transcript browsing.
+## Product Intent
+Turn counseling session audio recordings into clear, accurate, and well-structured session notes with optional speaker labeling and searchable indexing.
 
-## Database Schema (Postgres)
-Data is managed with SQLAlchemy models and Alembic migrations.
+## Current Architecture
+- FastAPI backend for session upload, transcription, diarization, and note generation.
+- Postgres via SQLAlchemy/Alembic for sessions, transcripts, and notes.
+- Qdrant for embeddings of structured notes.
+- React UI for session creation and session list + notes viewing.
+
+## Database Schema
+### `sessions`
+- `id` (int, PK)
+- `title` (string)
+- `status` (string: uploaded/transcribed/noted)
+- `session_date` (datetime, nullable)
+- `created_at` (datetime)
+- `updated_at` (datetime)
 
 ### `audio_files`
 - `id` (int, PK)
+- `session_id` (int, FK -> sessions.id, indexed)
 - `file_key` (string, unique, indexed)
 - `original_filename` (string)
 - `content_type` (string)
@@ -24,62 +37,44 @@ Data is managed with SQLAlchemy models and Alembic migrations.
 - `created_at` (datetime)
 - `updated_at` (datetime)
 
-## Core Data Flow
-1) Upload audio -> validate content type -> write to `src/server/uploads/` -> create `audio_files` row.
-2) Transcribe -> fetch audio by `file_key` -> OpenAI Whisper transcription -> write/update `transcripts` row.
-3) Diarize -> fetch audio by `file_key` -> AssemblyAI diarization -> write/update diarization fields.
-4) Indexing -> embed transcript text with OpenAI embeddings -> upsert into Qdrant with metadata payload.
-5) UI -> calls API to upload, transcribe, diarize, list transcripts, and view transcript segments.
+### `session_notes`
+- `id` (int, PK)
+- `session_id` (int, FK -> sessions.id, unique, indexed)
+- `note_markdown` (text)
+- `summary` (text, nullable)
+- `key_points` (json, nullable)
+- `action_items` (json, nullable)
+- `risk_flags` (json, nullable)
+- `model` (string)
+- `version` (string)
+- `created_at` (datetime)
+- `updated_at` (datetime)
 
-## APIs (FastAPI)
-Base prefix: `/api/v1`
-
-- `POST /upload`  
-  Uploads an audio file; returns `{file_key, filename, path, content_type}`.
-- `POST /transcribe/{file_key}`  
-  Runs OpenAI transcription; returns `{file_key, text, segments}`.
-- `POST /diarize/{file_key}`  
-  Runs AssemblyAI diarization; returns `{file_key, text, segments}`.
-- `GET /transcripts?page=&page_size=`  
-  Paginated transcript list with durations and diarization availability.
-- `GET /transcripts/{file_key}`  
-  Returns transcript text + segments for a file.
-- `GET /config`  
-  Returns `{API_BASE_URL}` for the UI.
+## API Flow
+1) `POST /sessions/upload` -> create session + audio.
+2) `POST /sessions/{session_id}/transcribe` -> generate transcript + segments.
+3) `POST /sessions/{session_id}/diarize` -> add speaker labels (optional).
+4) `POST /sessions/{session_id}/notes` -> generate structured counseling notes.
+5) `GET /sessions` -> list sessions + notes status.
+6) `GET /sessions/{session_id}` -> session detail.
+7) `GET /sessions/{session_id}/notes` -> structured notes payload.
 
 ## LLM / Agent Design
-All agents are thin, environment-configured wrappers that isolate external API calls.
+- `NotesAgent` consumes transcript + diarization segments and outputs structured JSON notes.
+- Final note is stored in `session_notes` and indexed for retrieval.
+- Transcription/diarization agents remain upstream steps.
 
-### TranscriptionAgent
-- Provider: OpenAI `audio.transcriptions.create`
-- Model: `OPENAI_TRANSCRIPTION_MODEL` (default `whisper-1`)
-- Output: `text` + `segments` (timestamped)
-- Used in: `transcribe_audio` service
+## Vector Store
+- Indexes `session_notes.note_markdown` plus summary metadata.
+- Payload includes `session_id`, `version`, and a type marker.
 
-### DiarizationAgent
-- Provider: AssemblyAI
-- Features: speaker labels, punctuation, formatted text
-- Output: `text` + `segments` with speaker labels and timestamps
-- Used in: `diarize_audio` service
+## UI Changes
+- "New Session" and "Sessions" navigation.
+- Upload view framed as counseling session note generation.
+- Session list shows notes availability and opens note detail in a modal.
 
-### LlmAgent
-- Provider: OpenAI (LangChain `ChatOpenAI`)
-- Model: `gpt-4o-mini`
-- Current use: initialized but not yet integrated into service flows
-
-## Vector Store (Qdrant)
-- Embeddings: OpenAI embeddings via LangChain (`OpenAIEmbeddings`)
-- Collection: `QDRANT_COLLECTION` (default `transcripts`)
-- Payload fields: `file_key`, `text`, `segment_count`, `diarized`
-- Trigger: after transcript or diarization stored in Postgres
-
-## UI (React)
-- Single-page frontend in `src/web` using fetch calls to FastAPI.
-- Supports upload, transcription, diarization, transcript list view, and segment modal.
-- Reads `/api/v1/config` to discover API base URL.
-
-## Config / Runtime Dependencies
-- Postgres: via `.env` (see `docker-compose.yml` for defaults)
-- Qdrant: `QDRANT_URL`, `QDRANT_COLLECTION`, optional `QDRANT_API_KEY`
-- OpenAI: `OPENAI_API_KEY`, `OPENAI_TRANSCRIPTION_MODEL`, `OPENAI_EMBEDDING_MODEL`
-- AssemblyAI: `ASSEMBLYAI_API_KEY`, `ASSEMBLYAI_BASE_URL`
+## Config / Runtime Dependencies (Unchanged)
+- Postgres via `.env`
+- Qdrant via `QDRANT_URL`, `QDRANT_COLLECTION`, optional `QDRANT_API_KEY`
+- OpenAI via `OPENAI_API_KEY`, `OPENAI_TRANSCRIPTION_MODEL`, `OPENAI_EMBEDDING_MODEL`
+- AssemblyAI via `ASSEMBLYAI_API_KEY`, `ASSEMBLYAI_BASE_URL`
