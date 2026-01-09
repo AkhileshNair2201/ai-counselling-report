@@ -15,6 +15,10 @@ Large audio files should be chunked and processed asynchronously. The new flow u
 - **Celery** to process chunks in the background.
 - **Aggregation** to coalesce chunk transcripts/notes into a final session record.
 
+### Optimization (Planned)
+- Use **asyncio** inside the Celery task to process multiple chunks in parallel.
+- Keep task-level isolation in Celery, but run concurrent API calls per chunk to improve throughput.
+
 ## Database Schema
 ### `sessions`
 - `id` (int, PK)

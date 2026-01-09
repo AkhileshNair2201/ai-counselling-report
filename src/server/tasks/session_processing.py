@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import shutil
 import subprocess
 from datetime import datetime
@@ -89,6 +90,102 @@ def _merge_text(texts: list[str]) -> str:
     return "\n".join([text.strip() for text in texts if text and text.strip()]).strip()
 
 
+def _process_chunk(
+    *,
+    audio_id: int,
+    audio_content_type: str | None,
+    chunk_file: Path,
+    chunk_index: int,
+    start_seconds: float,
+    end_seconds: float,
+) -> int:
+    with SessionLocal() as session:
+        chunk = AudioChunk(
+            audio_file_id=audio_id,
+            chunk_index=chunk_index,
+            file_path=str(chunk_file),
+            start_seconds=start_seconds,
+            end_seconds=end_seconds,
+        )
+        session.add(chunk)
+        session.commit()
+        session.refresh(chunk)
+
+    transcription_agent = TranscriptionAgent.from_env()
+    diarization_agent = DiarizationAgent.from_env()
+
+    transcript_payload = transcription_agent.transcribe(chunk_file)
+    diarization_payload = diarization_agent.diarize(chunk_file, audio_content_type)
+
+    transcript_text = str(transcript_payload.get("text", ""))
+    segments = transcript_payload.get("segments", [])
+    diarized_text = str(diarization_payload.get("text", ""))
+    diarized_segments = diarization_payload.get("segments", [])
+
+    duration_seconds = None
+    if isinstance(diarized_segments, list):
+        duration_seconds = _calculate_duration_seconds(diarized_segments)
+    elif isinstance(segments, list):
+        duration_seconds = _calculate_duration_seconds(segments)
+
+    with SessionLocal() as session:
+        existing = session.execute(
+            select(ChunkTranscript).where(ChunkTranscript.audio_chunk_id == chunk.id)
+        ).scalar_one_or_none()
+        if existing is None:
+            record = ChunkTranscript(
+                audio_chunk_id=chunk.id,
+                text=transcript_text,
+                segments=segments,
+                diarized_text=diarized_text,
+                diarized_segments=diarized_segments,
+                duration_seconds=duration_seconds,
+            )
+            session.add(record)
+        else:
+            existing.text = transcript_text
+            existing.segments = segments
+            existing.diarized_text = diarized_text
+            existing.diarized_segments = diarized_segments
+            existing.duration_seconds = duration_seconds
+        session.commit()
+
+    return chunk.id
+
+
+async def _process_chunks_concurrently(
+    *,
+    chunk_inputs: list[tuple[int, Path, float, float]],
+    audio_id: int,
+    audio_content_type: str | None,
+) -> list[int]:
+    if not chunk_inputs:
+        return []
+
+    max_parallel = min(4, len(chunk_inputs))
+    semaphore = asyncio.Semaphore(max_parallel)
+
+    async def run_one(
+        chunk_index: int, chunk_file: Path, start_seconds: float, end_seconds: float
+    ) -> int:
+        async with semaphore:
+            return await asyncio.to_thread(
+                _process_chunk,
+                audio_id=audio_id,
+                audio_content_type=audio_content_type,
+                chunk_file=chunk_file,
+                chunk_index=chunk_index,
+                start_seconds=start_seconds,
+                end_seconds=end_seconds,
+            )
+
+    tasks = [
+        asyncio.create_task(run_one(index, chunk_file, start, end))
+        for index, chunk_file, start, end in chunk_inputs
+    ]
+    return await asyncio.gather(*tasks)
+
+
 @celery_app.task(
     name="server.tasks.session_processing.process_session_chunks",
     autoretry_for=(APITimeoutError, TimeoutException),
@@ -124,9 +221,6 @@ def process_session_chunks(session_id: int) -> dict[str, object]:
     if not chunk_files:
         raise RuntimeError("No chunks created for audio file")
 
-    transcription_agent = TranscriptionAgent.from_env()
-    diarization_agent = DiarizationAgent.from_env()
-
     with SessionLocal() as session:
         chunk_ids = session.execute(
             select(AudioChunk.id).where(AudioChunk.audio_file_id == audio_id)
@@ -142,59 +236,19 @@ def process_session_chunks(session_id: int) -> dict[str, object]:
         )
         session.commit()
 
+    chunk_inputs: list[tuple[int, Path, float, float]] = []
     for index, chunk_file in enumerate(chunk_files):
         start_seconds = float(index * chunk_seconds)
         end_seconds = start_seconds + chunk_seconds
+        chunk_inputs.append((index, chunk_file, start_seconds, end_seconds))
 
-        with SessionLocal() as session:
-            chunk = AudioChunk(
-                audio_file_id=audio_id,
-                chunk_index=index,
-                file_path=str(chunk_file),
-                start_seconds=start_seconds,
-                end_seconds=end_seconds,
-            )
-            session.add(chunk)
-            session.commit()
-            session.refresh(chunk)
-
-        transcript_payload = transcription_agent.transcribe(chunk_file)
-        diarization_payload = diarization_agent.diarize(
-            chunk_file, audio_content_type
+    asyncio.run(
+        _process_chunks_concurrently(
+            chunk_inputs=chunk_inputs,
+            audio_id=audio_id,
+            audio_content_type=audio_content_type,
         )
-
-        transcript_text = str(transcript_payload.get("text", ""))
-        segments = transcript_payload.get("segments", [])
-        diarized_text = str(diarization_payload.get("text", ""))
-        diarized_segments = diarization_payload.get("segments", [])
-
-        duration_seconds = None
-        if isinstance(diarized_segments, list):
-            duration_seconds = _calculate_duration_seconds(diarized_segments)
-        elif isinstance(segments, list):
-            duration_seconds = _calculate_duration_seconds(segments)
-
-        with SessionLocal() as session:
-            existing = session.execute(
-                select(ChunkTranscript).where(ChunkTranscript.audio_chunk_id == chunk.id)
-            ).scalar_one_or_none()
-            if existing is None:
-                record = ChunkTranscript(
-                    audio_chunk_id=chunk.id,
-                    text=transcript_text,
-                    segments=segments,
-                    diarized_text=diarized_text,
-                    diarized_segments=diarized_segments,
-                    duration_seconds=duration_seconds,
-                )
-                session.add(record)
-            else:
-                existing.text = transcript_text
-                existing.segments = segments
-                existing.diarized_text = diarized_text
-                existing.diarized_segments = diarized_segments
-                existing.duration_seconds = duration_seconds
-            session.commit()
+    )
 
     with SessionLocal() as session:
         rows = session.execute(
