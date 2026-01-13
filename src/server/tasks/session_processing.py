@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import shutil
 import subprocess
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -19,9 +20,8 @@ from server.models.session import Session
 from server.models.session_note import SessionNote
 from server.models.transcript import Transcript
 from server.models.database import SessionLocal
-from server.agents.diarization_agent import DiarizationAgent
 from server.agents.notes_agent import NotesAgent
-from server.agents.transcription_agent import TranscriptionAgent
+from server.agents.sarvam_stt_agent import SarvamSttAgent
 from server.services.services import _calculate_duration_seconds, _resolve_audio_path
 from server.services.vector_store import upsert_session_note_vector
 
@@ -90,10 +90,32 @@ def _merge_text(texts: list[str]) -> str:
     return "\n".join([text.strip() for text in texts if text and text.strip()]).strip()
 
 
+def _generate_notes_with_retry(
+    *,
+    notes_agent: NotesAgent,
+    transcript_text: str,
+    diarized_segments: list[dict[str, object]] | None,
+    max_retries: int = 3,
+    retry_delay_seconds: float = 2.0,
+) -> dict[str, object]:
+    last_error: Exception | None = None
+    for attempt in range(max_retries + 1):
+        try:
+            return notes_agent.generate_notes(
+                transcript_text=transcript_text,
+                diarized_segments=diarized_segments,
+            )
+        except Exception as exc:
+            last_error = exc
+            if attempt >= max_retries:
+                break
+            time.sleep(retry_delay_seconds)
+    raise RuntimeError(str(last_error) if last_error else "Notes generation failed")
+
+
 def _process_chunk(
     *,
     audio_id: int,
-    audio_content_type: str | None,
     chunk_file: Path,
     chunk_index: int,
     start_seconds: float,
@@ -111,22 +133,19 @@ def _process_chunk(
         session.commit()
         session.refresh(chunk)
 
-    transcription_agent = TranscriptionAgent.from_env()
-    diarization_agent = DiarizationAgent.from_env()
-
-    transcript_payload = transcription_agent.transcribe(chunk_file)
-    diarization_payload = diarization_agent.diarize(chunk_file, audio_content_type)
+    sarvam_agent = SarvamSttAgent.from_env()
+    transcript_payload = sarvam_agent.transcribe_with_diarization(chunk_file)
 
     transcript_text = str(transcript_payload.get("text", ""))
-    segments = transcript_payload.get("segments", [])
-    diarized_text = str(diarization_payload.get("text", ""))
-    diarized_segments = diarization_payload.get("segments", [])
+    diarized_segments = transcript_payload.get("segments", [])
+    diarized_text = transcript_text
+    segments: list[dict[str, object]] = []
 
-    duration_seconds = None
-    if isinstance(diarized_segments, list):
-        duration_seconds = _calculate_duration_seconds(diarized_segments)
-    elif isinstance(segments, list):
-        duration_seconds = _calculate_duration_seconds(segments)
+    duration_seconds = (
+        _calculate_duration_seconds(diarized_segments)
+        if isinstance(diarized_segments, list)
+        else None
+    )
 
     with SessionLocal() as session:
         existing = session.execute(
@@ -157,7 +176,6 @@ async def _process_chunks_concurrently(
     *,
     chunk_inputs: list[tuple[int, Path, float, float]],
     audio_id: int,
-    audio_content_type: str | None,
 ) -> list[int]:
     if not chunk_inputs:
         return []
@@ -172,7 +190,6 @@ async def _process_chunks_concurrently(
             return await asyncio.to_thread(
                 _process_chunk,
                 audio_id=audio_id,
-                audio_content_type=audio_content_type,
                 chunk_file=chunk_file,
                 chunk_index=chunk_index,
                 start_seconds=start_seconds,
@@ -205,13 +222,12 @@ def process_session_chunks(session_id: int) -> dict[str, object]:
         session_row, audio = row
         audio_id = audio.id
         audio_file_key = audio.file_key
-        audio_content_type = audio.content_type
         session_row.status = "processing"
         session_row.updated_at = datetime.utcnow()
         session.commit()
 
     audio_path = _resolve_audio_path(audio_file_key)
-    chunk_seconds = max(get_audio_chunk_seconds(), 30)
+    chunk_seconds = min(get_audio_chunk_seconds(), 25)
     chunks_dir = audio_path.parent / "chunks" / audio_file_key
     chunk_files = _chunk_audio(
         audio_path=audio_path,
@@ -246,7 +262,6 @@ def process_session_chunks(session_id: int) -> dict[str, object]:
         _process_chunks_concurrently(
             chunk_inputs=chunk_inputs,
             audio_id=audio_id,
-            audio_content_type=audio_content_type,
         )
     )
 
@@ -305,10 +320,26 @@ def process_session_chunks(session_id: int) -> dict[str, object]:
         session.commit()
 
     notes_agent = NotesAgent.from_env()
-    notes_payload = notes_agent.generate_notes(
-        transcript_text=merged_diarized_text or merged_text,
-        diarized_segments=merged_diarized_segments or merged_segments,
-    )
+    try:
+        notes_payload = _generate_notes_with_retry(
+            notes_agent=notes_agent,
+            transcript_text=merged_diarized_text or merged_text,
+            diarized_segments=merged_diarized_segments or merged_segments,
+        )
+    except Exception as exc:
+        with SessionLocal() as session:
+            session_row = session.get(Session, session_id)
+            if session_row:
+                session_row.status = "transcribed"
+                session_row.updated_at = datetime.utcnow()
+            session.commit()
+        return {
+            "session_id": session_id,
+            "chunks": len(chunk_files),
+            "status": "transcribed",
+            "notes_status": "failed",
+            "error": str(exc),
+        }
 
     with SessionLocal() as session:
         existing_note = session.execute(
@@ -348,4 +379,9 @@ def process_session_chunks(session_id: int) -> dict[str, object]:
         version=notes_payload["version"],
     )
 
-    return {"session_id": session_id, "chunks": len(chunk_files), "status": "noted"}
+    return {
+        "session_id": session_id,
+        "chunks": len(chunk_files),
+        "status": "noted",
+        "notes_status": "ready",
+    }

@@ -21,6 +21,9 @@
   --table-border: #e5e7eb;
   --table-head: #374151;
   --modal-backdrop: rgba(15, 23, 42, 0.55);
+  --transcript-bg: rgba(15, 23, 42, 0.06);
+  --transcript-meta: #475569;
+  --transcript-speaker: #0f766e;
 }
 
 [data-theme="dark"] {
@@ -45,6 +48,9 @@
   --table-border: #1e293b;
   --table-head: #cbd5f5;
   --modal-backdrop: rgba(2, 6, 23, 0.75);
+  --transcript-bg: rgba(15, 23, 42, 0.6);
+  --transcript-meta: #94a3b8;
+  --transcript-speaker: #5eead4;
 }
 
 * {
@@ -293,6 +299,42 @@ button:hover {
   font-family: "DM Sans", "Trebuchet MS", sans-serif;
 }
 
+.transcript-list {
+  display: grid;
+  gap: 12px;
+}
+
+.transcript-row {
+  display: grid;
+  grid-template-columns: 150px 1fr;
+  gap: 16px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--surface-border);
+  background: var(--transcript-bg);
+}
+
+.transcript-meta {
+  display: grid;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.transcript-speaker {
+  color: var(--transcript-speaker);
+  text-transform: capitalize;
+}
+
+.transcript-time {
+  font-size: 0.85rem;
+  color: var(--transcript-meta);
+  font-weight: 500;
+}
+
+.transcript-text {
+  line-height: 1.6;
+}
+
 @media (max-width: 720px) {
   .page {
     width: min(100%, 100%);
@@ -301,5 +343,16 @@ button:hover {
   .card {
     height: auto;
     padding: 24px;
+  }
+
+  .transcript-row {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .transcript-meta {
+    grid-auto-flow: column;
+    justify-content: space-between;
+    align-items: baseline;
   }
 }

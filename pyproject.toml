@@ -16,7 +16,7 @@ dependencies = [
   "psycopg2-binary",
   "alembic",
   "langchain-openai",
-  "assemblyai",
+  "sarvamai",
   "qdrant-client",
 ]
 

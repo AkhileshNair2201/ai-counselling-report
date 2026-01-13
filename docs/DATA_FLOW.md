@@ -4,7 +4,7 @@ This document explains how counseling session audio moves through the system and
 
 ## High-Level Flow (UI -> API -> DB)
 1) Upload a session recording.
-2) Transcribe/diarize immediately or queue chunked background processing.
+2) Queue chunked background processing (Sarvam STT + diarization).
 3) Generate structured session notes.
 4) Store transcripts + notes in Postgres and index notes in Qdrant.
 5) UI lists sessions and shows generated notes.
@@ -13,13 +13,11 @@ This document explains how counseling session audio moves through the system and
 All routes are under `/api/v1` (see `src/server/api/api.py`).
 
 - `POST /sessions/upload` -> `save_session_audio`
-- `POST /sessions/{session_id}/transcribe` -> `transcribe_session`
-- `POST /sessions/{session_id}/diarize` -> `diarize_session`
-- `POST /sessions/{session_id}/notes` -> `generate_session_notes`
 - `POST /sessions/{session_id}/process-large` -> `enqueue_chunked_processing`
 - `GET /sessions` -> `list_sessions`
 - `GET /sessions/{session_id}` -> `get_session_detail`
 - `GET /sessions/{session_id}/notes` -> `get_session_notes`
+- `GET /transcripts/{file_key}` -> `get_transcript_segments`
 
 ## Core Services (Synchronous)
 Defined in `src/server/services/services.py`.
@@ -30,20 +28,7 @@ Defined in `src/server/services/services.py`.
   - Writes the file to `src/server/uploads/`
   - Creates `sessions` + `audio_files` rows
 
-### Transcription
-- `transcribe_session(session_id)`
-  - Fetches session + audio by `session_id`
-  - Uses `TranscriptionAgent` (OpenAI Whisper)
-  - Saves/updates `transcripts`
-  - Updates `sessions.status` -> `transcribed`
-
-### Diarization
-- `diarize_session(session_id)`
-  - Uses `DiarizationAgent` (AssemblyAI)
-  - Stores diarized text/segments into `transcripts`
-  - Updates `sessions.status` -> `transcribed`
-
-### Note Generation
+### Note Generation (Internal)
 - `generate_session_notes(session_id)`
   - Uses `NotesAgent` (LLM) to create structured note JSON
   - Writes to `session_notes`
@@ -62,8 +47,7 @@ Implemented in `src/server/tasks/session_processing.py`.
 1) Load session + audio metadata.
 2) Split audio into ordered chunks with FFmpeg (`_chunk_audio`).
 3) For each chunk:
-   - Transcribe via `TranscriptionAgent`
-   - Diarize via `DiarizationAgent`
+   - Transcribe + translate + diarize via Sarvam STT
    - Store chunk metadata in `audio_chunks`
    - Store chunk transcript in `chunk_transcripts`
 4) Merge all chunk transcripts in order:
@@ -79,8 +63,7 @@ Retry behavior:
 ## Agents (LLM & Speech)
 Located in `src/server/agents/`.
 
-- `TranscriptionAgent` (OpenAI Whisper)
-- `DiarizationAgent` (AssemblyAI)
+- Sarvam STT + diarization agent (speech-to-text translation + speaker labeling)
 - `NotesAgent` (LLM) in `src/server/agents/notes_agent.py`
   - Produces JSON: `note_markdown`, `summary`, `key_points`, `action_items`, `risk_flags`
 

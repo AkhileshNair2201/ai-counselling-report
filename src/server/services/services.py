@@ -12,10 +12,8 @@ from server.models.session import Session
 from server.models.session_note import SessionNote
 from server.models.transcript import Transcript
 from server.models.database import SessionLocal
-from server.agents.diarization_agent import DiarizationAgent
 from server.agents.notes_agent import NotesAgent
-from server.agents.transcription_agent import TranscriptionAgent
-from server.services.vector_store import upsert_session_note_vector, upsert_transcript_vector
+from server.services.vector_store import upsert_session_note_vector
 from server.core.celery_app import celery_app
 
 UPLOAD_DIR = Path(__file__).resolve().parent.parent / "uploads"
@@ -127,31 +125,6 @@ def _calculate_duration_seconds(segments: list[dict[str, object]]) -> float | No
     return float(max_end) if max_end is not None else None
 
 
-def _index_transcript(
-    *,
-    transcript_id: int,
-    file_key: str,
-    text: str,
-    segments: list[dict[str, object]] | None,
-    diarized: bool,
-) -> None:
-    try:
-        upsert_transcript_vector(
-            transcript_id=transcript_id,
-            file_key=file_key,
-            text=text,
-            segments=segments,
-            diarized=diarized,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Vector indexing failed: {exc}",
-        ) from exc
-
-
 def _index_session_note(
     *,
     session_id: int,
@@ -173,122 +146,6 @@ def _index_session_note(
             status_code=500,
             detail=f"Vector indexing failed: {exc}",
         ) from exc
-
-
-def transcribe_audio(file_key: str) -> dict[str, object]:
-    with SessionLocal() as session:
-        result = session.execute(
-            select(AudioFile).where(AudioFile.file_key == file_key)
-        ).scalar_one_or_none()
-        if result is None:
-            raise HTTPException(status_code=404, detail="Audio file not found")
-
-    audio_path = _resolve_audio_path(file_key)
-    try:
-        agent = TranscriptionAgent.from_env()
-    except ValueError as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-
-    transcript_payload = agent.transcribe(audio_path)
-    transcript_text = str(transcript_payload.get("text", ""))
-    segments = transcript_payload.get("segments", [])
-    duration_seconds = (
-        _calculate_duration_seconds(segments)
-        if isinstance(segments, list)
-        else None
-    )
-
-    with SessionLocal() as session:
-        existing = session.execute(
-            select(Transcript).where(Transcript.audio_file_id == result.id)
-        ).scalar_one_or_none()
-        if existing is None:
-            record = Transcript(
-                audio_file_id=result.id,
-                text=transcript_text,
-                segments=segments,
-                duration_seconds=duration_seconds,
-            )
-            session.add(record)
-        else:
-            existing.text = transcript_text
-            existing.segments = segments
-            existing.duration_seconds = duration_seconds
-            existing.updated_at = datetime.utcnow()
-
-        session.commit()
-
-        stored = session.execute(
-            select(Transcript).where(Transcript.audio_file_id == result.id)
-        ).scalar_one()
-
-    return {
-        "file_key": file_key,
-        "text": stored.text,
-        "segments": stored.segments or [],
-    }
-
-
-def transcribe_session(session_id: int) -> dict[str, object]:
-    with SessionLocal() as session:
-        row = session.execute(
-            select(Session, AudioFile).join(
-                AudioFile, AudioFile.session_id == Session.id
-            ).where(Session.id == session_id)
-        ).first()
-        if row is None:
-            raise HTTPException(status_code=404, detail="Session not found")
-        session_row, audio = row
-
-    audio_path = _resolve_audio_path(audio.file_key)
-    try:
-        agent = TranscriptionAgent.from_env()
-    except ValueError as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-
-    transcript_payload = agent.transcribe(audio_path)
-    transcript_text = str(transcript_payload.get("text", ""))
-    segments = transcript_payload.get("segments", [])
-    duration_seconds = (
-        _calculate_duration_seconds(segments)
-        if isinstance(segments, list)
-        else None
-    )
-
-    with SessionLocal() as session:
-        existing = session.execute(
-            select(Transcript).where(Transcript.audio_file_id == audio.id)
-        ).scalar_one_or_none()
-        if existing is None:
-            record = Transcript(
-                audio_file_id=audio.id,
-                text=transcript_text,
-                segments=segments,
-                duration_seconds=duration_seconds,
-            )
-            session.add(record)
-        else:
-            existing.text = transcript_text
-            existing.segments = segments
-            existing.duration_seconds = duration_seconds
-            existing.updated_at = datetime.utcnow()
-
-        session_row = session.get(Session, session_id)
-        if session_row:
-            session_row.status = "transcribed"
-            session_row.updated_at = datetime.utcnow()
-        session.commit()
-
-        stored = session.execute(
-            select(Transcript).where(Transcript.audio_file_id == audio.id)
-        ).scalar_one()
-
-    return {
-        "session_id": session_id,
-        "file_key": audio.file_key,
-        "text": stored.text,
-        "segments": stored.segments or [],
-    }
 
 
 def list_transcripts(page: int, page_size: int) -> dict[str, object]:
@@ -318,7 +175,7 @@ def list_transcripts(page: int, page_size: int) -> dict[str, object]:
                 "content_type": audio.content_type,
                 "duration_seconds": duration,
                 "transcript_available": True,
-                "diarization_available": bool(transcript.diarized_segments),
+                "diarization_available": bool(transcript.segments),
             }
         )
 
@@ -391,6 +248,8 @@ def get_transcript_segments(file_key: str) -> dict[str, object]:
         "file_key": audio.file_key,
         "text": transcript.text,
         "segments": transcript.segments or [],
+        "diarized_text": transcript.diarized_text,
+        "diarized_segments": transcript.diarized_segments or [],
     }
 
 
@@ -419,132 +278,6 @@ def get_session_detail(session_id: int) -> dict[str, object]:
     }
 
 
-def diarize_audio(file_key: str) -> dict[str, object]:
-    with SessionLocal() as session:
-        result = session.execute(
-            select(AudioFile).where(AudioFile.file_key == file_key)
-        ).scalar_one_or_none()
-        if result is None:
-            raise HTTPException(status_code=404, detail="Audio file not found")
-
-    audio_path = _resolve_audio_path(file_key)
-    try:
-        agent = DiarizationAgent.from_env()
-    except ValueError as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-
-    diarization_payload = agent.diarize(audio_path, result.content_type)
-    diarized_text = str(diarization_payload.get("text", ""))
-    diarized_segments = diarization_payload.get("segments", [])
-    duration_seconds = (
-        _calculate_duration_seconds(diarized_segments)
-        if isinstance(diarized_segments, list)
-        else None
-    )
-
-    with SessionLocal() as session:
-        existing = session.execute(
-            select(Transcript).where(Transcript.audio_file_id == result.id)
-        ).scalar_one_or_none()
-        if existing is None:
-            record = Transcript(
-                audio_file_id=result.id,
-                text=diarized_text,
-                segments=diarized_segments,
-                diarized_text=diarized_text,
-                diarized_segments=diarized_segments,
-                duration_seconds=duration_seconds,
-            )
-            session.add(record)
-        else:
-            existing.diarized_text = diarized_text
-            existing.diarized_segments = diarized_segments
-            existing.segments = diarized_segments
-            if not existing.text:
-                existing.text = diarized_text
-            existing.duration_seconds = duration_seconds
-            existing.updated_at = datetime.utcnow()
-
-        session.commit()
-
-        stored = session.execute(
-            select(Transcript).where(Transcript.audio_file_id == result.id)
-        ).scalar_one()
-
-    return {
-        "file_key": file_key,
-        "text": stored.diarized_text or "",
-        "segments": stored.diarized_segments or [],
-    }
-
-
-def diarize_session(session_id: int) -> dict[str, object]:
-    with SessionLocal() as session:
-        row = session.execute(
-            select(Session, AudioFile).join(
-                AudioFile, AudioFile.session_id == Session.id
-            ).where(Session.id == session_id)
-        ).first()
-        if row is None:
-            raise HTTPException(status_code=404, detail="Session not found")
-        session_row, audio = row
-
-    audio_path = _resolve_audio_path(audio.file_key)
-    try:
-        agent = DiarizationAgent.from_env()
-    except ValueError as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-
-    diarization_payload = agent.diarize(audio_path, audio.content_type)
-    diarized_text = str(diarization_payload.get("text", ""))
-    diarized_segments = diarization_payload.get("segments", [])
-    duration_seconds = (
-        _calculate_duration_seconds(diarized_segments)
-        if isinstance(diarized_segments, list)
-        else None
-    )
-
-    with SessionLocal() as session:
-        existing = session.execute(
-            select(Transcript).where(Transcript.audio_file_id == audio.id)
-        ).scalar_one_or_none()
-        if existing is None:
-            record = Transcript(
-                audio_file_id=audio.id,
-                text=diarized_text,
-                segments=diarized_segments,
-                diarized_text=diarized_text,
-                diarized_segments=diarized_segments,
-                duration_seconds=duration_seconds,
-            )
-            session.add(record)
-        else:
-            existing.diarized_text = diarized_text
-            existing.diarized_segments = diarized_segments
-            existing.segments = diarized_segments
-            if not existing.text:
-                existing.text = diarized_text
-            existing.duration_seconds = duration_seconds
-            existing.updated_at = datetime.utcnow()
-
-        session_row = session.get(Session, session_id)
-        if session_row:
-            session_row.status = "transcribed"
-            session_row.updated_at = datetime.utcnow()
-        session.commit()
-
-        stored = session.execute(
-            select(Transcript).where(Transcript.audio_file_id == audio.id)
-        ).scalar_one()
-
-    return {
-        "session_id": session_id,
-        "file_key": audio.file_key,
-        "text": stored.diarized_text or "",
-        "segments": stored.diarized_segments or [],
-    }
-
-
 def generate_session_notes(session_id: int) -> dict[str, object]:
     with SessionLocal() as session:
         row = session.execute(
@@ -559,8 +292,8 @@ def generate_session_notes(session_id: int) -> dict[str, object]:
         if transcript is None:
             raise HTTPException(status_code=400, detail="Transcript not available")
 
-    diarized_segments = transcript.diarized_segments or transcript.segments
-    text_for_notes = transcript.diarized_text or transcript.text or ""
+    diarized_segments = transcript.segments
+    text_for_notes = transcript.text or ""
     try:
         agent = NotesAgent.from_env()
     except ValueError as exc:

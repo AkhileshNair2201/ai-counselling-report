@@ -11,12 +11,13 @@ pip3 install -r requirements.txt
 uvicorn server.main:app --reload --app-dir src
 ```
 
-## Transcription
+## Processing (Sarvam STT + Diarization)
 
-Set `OPENAI_API_KEY` in `.env` (placeholder is already there), then call:
+Set `SARVAM_API_KEY` in `.env`, then upload a session and enqueue chunked processing:
 
 ```bash
-curl -X POST http://127.0.0.1:8000/api/v1/transcribe/<file_key>
+curl -F "file=@/path/to/audio.mp3" http://127.0.0.1:8000/api/v1/sessions/upload
+curl -X POST http://127.0.0.1:8000/api/v1/sessions/<session_id>/process-large
 ```
 
 ## Vector Indexing (Qdrant)

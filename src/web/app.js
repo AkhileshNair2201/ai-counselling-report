@@ -6,12 +6,8 @@
     const [file, setFile] = useState(null);
     const [status, setStatus] = useState("");
     const [response, setResponse] = useState(null);
-    const [transcript, setTranscript] = useState("");
     const [sessionId, setSessionId] = useState(null);
     const [isUploading, setIsUploading] = useState(false);
-    const [isTranscribing, setIsTranscribing] = useState(false);
-    const [isDiarizing, setIsDiarizing] = useState(false);
-    const [isGeneratingNotes, setIsGeneratingNotes] = useState(false);
     const [isProcessingLarge, setIsProcessingLarge] = useState(false);
     const [apiBaseUrl, setApiBaseUrl] = useState(DEFAULT_API_BASE_URL);
     const [view, setView] = useState("upload");
@@ -21,8 +17,9 @@
     const [listPageSize, setListPageSize] = useState(10);
     const [isLoadingList, setIsLoadingList] = useState(false);
     const [modalOpen, setModalOpen] = useState(false);
-    const [modalContent, setModalContent] = useState("");
+    const [modalContent, setModalContent] = useState(null);
     const [modalTitle, setModalTitle] = useState("");
+    const [modalType, setModalType] = useState("notes");
     const [openMenuSessionId, setOpenMenuSessionId] = useState(null);
     const [theme, setTheme] = useState("light");
 
@@ -105,7 +102,6 @@
     async function handleSubmit(event) {
       event.preventDefault();
       setResponse(null);
-      setTranscript("");
       setSessionId(null);
 
       if (!file) {
@@ -138,120 +134,6 @@
         setStatus(error.message || "Something went wrong.");
       } finally {
         setIsUploading(false);
-      }
-    }
-
-    function formatTimestamp(value) {
-      if (typeof value !== "number" || Number.isNaN(value)) {
-        return "0.00";
-      }
-      return value.toFixed(2);
-    }
-
-    function formatSegments(segments) {
-      if (!Array.isArray(segments) || segments.length === 0) {
-        return "";
-      }
-        return segments
-          .map((segment) => {
-            const text = segment.text || "";
-            const timestamp = segment.timestamp || {};
-            const start = formatTimestamp(timestamp.start);
-            const end = formatTimestamp(timestamp.end);
-            const speaker = segment.speaker ? `${segment.speaker} ` : "";
-            return `${start}-${end} : ${speaker}${text}`.trim();
-          })
-          .join("\n");
-    }
-
-    async function handleTranscribe() {
-      if (!sessionId) {
-        setStatus("Upload a session recording before transcribing.");
-        return;
-      }
-
-      try {
-        setStatus("Transcribing...");
-        setIsTranscribing(true);
-        const res = await fetch(
-          `${apiBaseUrl}/sessions/${sessionId}/transcribe`,
-          { method: "POST" }
-        );
-
-        if (!res.ok) {
-          const errorPayload = await res.json().catch(() => ({}));
-          const detail = errorPayload.detail || "Transcription failed";
-          throw new Error(detail);
-        }
-
-        const payload = await res.json();
-        const formatted = formatSegments(payload.segments);
-        setTranscript(formatted || payload.text || payload.transcript || "");
-        setStatus("Transcription complete.");
-      } catch (error) {
-        setStatus(error.message || "Something went wrong.");
-      } finally {
-        setIsTranscribing(false);
-      }
-    }
-
-    async function handleDiarize() {
-      if (!sessionId) {
-        setStatus("Upload a session recording before diarizing.");
-        return;
-      }
-
-      try {
-        setStatus("Diarizing...");
-        setIsDiarizing(true);
-        const res = await fetch(
-          `${apiBaseUrl}/sessions/${sessionId}/diarize`,
-          {
-            method: "POST",
-          }
-        );
-
-        if (!res.ok) {
-          const errorPayload = await res.json().catch(() => ({}));
-          const detail = errorPayload.detail || "Diarization failed";
-          throw new Error(detail);
-        }
-
-        const payload = await res.json();
-        const formatted = formatSegments(payload.segments);
-        setTranscript(formatted || payload.text || "");
-        setStatus("Diarization complete.");
-      } catch (error) {
-        setStatus(error.message || "Something went wrong.");
-      } finally {
-        setIsDiarizing(false);
-      }
-    }
-
-    async function handleGenerateNotes() {
-      if (!sessionId) {
-        setStatus("Upload a session recording before generating notes.");
-        return;
-      }
-
-      try {
-        setStatus("Generating notes...");
-        setIsGeneratingNotes(true);
-        const res = await fetch(`${apiBaseUrl}/sessions/${sessionId}/notes`, {
-          method: "POST",
-        });
-        if (!res.ok) {
-          const errorPayload = await res.json().catch(() => ({}));
-          const detail = errorPayload.detail || "Notes generation failed";
-          throw new Error(detail);
-        }
-        const payload = await res.json();
-        setTranscript(payload.note_markdown || "");
-        setStatus("Session notes ready.");
-      } catch (error) {
-        setStatus(error.message || "Something went wrong.");
-      } finally {
-        setIsGeneratingNotes(false);
       }
     }
 
@@ -292,11 +174,40 @@
         }
         const payload = await res.json();
         setModalContent(payload.note_markdown || "");
+        setModalType("notes");
         setModalTitle(item.title || "Session Notes");
         setModalOpen(true);
       } catch (error) {
         setStatus(error.message || "Something went wrong.");
       }
+    }
+
+    function formatTimecode(value) {
+      if (typeof value !== "number" || Number.isNaN(value)) {
+        return "00:00.00";
+      }
+      const safeValue = Math.max(0, value);
+      const minutes = Math.floor(safeValue / 60);
+      const seconds = safeValue - minutes * 60;
+      const minutesText = String(minutes).padStart(2, "0");
+      const secondsText = seconds.toFixed(2).padStart(5, "0");
+      return `${minutesText}:${secondsText}`;
+    }
+
+    function formatSpeaker(value) {
+      if (!value) {
+        return "Speaker";
+      }
+      const label = String(value);
+      let normalized = label;
+      if (label.startsWith("SPEAKER_")) {
+        normalized = label.replace("SPEAKER_", "Speaker ");
+      }
+      normalized = normalized.replace(/_/g, " ");
+      if (normalized.toLowerCase().startsWith("speaker speaker ")) {
+        normalized = `Speaker ${normalized.slice("speaker speaker ".length)}`;
+      }
+      return normalized;
     }
 
     async function handleViewTranscript(item) {
@@ -314,8 +225,9 @@
           throw new Error(detail);
         }
         const payload = await res.json();
-        const formatted = formatSegments(payload.segments || []);
-        setModalContent(formatted || payload.text || "");
+        const diarized = payload.diarized_segments || payload.segments || [];
+        setModalContent(Array.isArray(diarized) ? diarized : []);
+        setModalType("transcript");
         setModalTitle(item.title || "Session Transcript");
         setModalOpen(true);
       } catch (error) {
@@ -325,8 +237,9 @@
 
     function closeModal() {
       setModalOpen(false);
-      setModalContent("");
+      setModalContent(null);
       setModalTitle("");
+      setModalType("notes");
     }
 
     function toggleMenu(sessionId) {
@@ -425,36 +338,6 @@
                   "button",
                   {
                     type: "button",
-                      onClick: handleTranscribe,
-                      disabled: !response || isTranscribing,
-                      className: "secondary",
-                  },
-                  isTranscribing ? "Transcribing..." : "Draft Transcript"
-                ),
-                React.createElement(
-                  "button",
-                  {
-                    type: "button",
-                    onClick: handleDiarize,
-                    disabled: !response || isDiarizing,
-                    className: "ghost",
-                  },
-                  isDiarizing ? "Diarizing..." : "Add Speaker Labels"
-                ),
-                React.createElement(
-                  "button",
-                  {
-                    type: "button",
-                    onClick: handleGenerateNotes,
-                    disabled: !response || isGeneratingNotes,
-                    className: "secondary",
-                  },
-                  isGeneratingNotes ? "Generating..." : "Generate Notes"
-                ),
-                React.createElement(
-                  "button",
-                  {
-                    type: "button",
                     onClick: handleProcessLarge,
                     disabled: !response || isProcessingLarge,
                     className: "ghost",
@@ -476,21 +359,7 @@
                     JSON.stringify(response, null, 2)
                   )
                 : null,
-              React.createElement(
-                "div",
-                { className: "transcript" },
-                React.createElement(
-                  "label",
-                  { htmlFor: "transcript-box" },
-                  "Session Note Draft"
-                ),
-                React.createElement("textarea", {
-                  id: "transcript-box",
-                  placeholder: "Transcript and note draft will appear here after processing.",
-                  value: transcript,
-                  readOnly: true,
-                })
-              )
+              null
             )
           : React.createElement(
               "div",
@@ -696,11 +565,51 @@
                 React.createElement(
                   "div",
                   { className: "modal-body" },
-                  React.createElement(
-                    "pre",
-                    { className: "modal-content" },
-                    modalContent || "No notes available."
-                  )
+                  modalType === "transcript"
+                    ? React.createElement(
+                        "div",
+                        { className: "transcript-list" },
+                        Array.isArray(modalContent) && modalContent.length
+                          ? modalContent.map((segment, index) =>
+                              React.createElement(
+                                "div",
+                                { className: "transcript-row", key: index },
+                                React.createElement(
+                                  "div",
+                                  { className: "transcript-meta" },
+                                  React.createElement(
+                                    "div",
+                                    { className: "transcript-speaker" },
+                                    formatSpeaker(segment.speaker)
+                                  ),
+                                  React.createElement(
+                                    "div",
+                                    { className: "transcript-time" },
+                                    `${formatTimecode(
+                                      segment.timestamp?.start
+                                    )} - ${formatTimecode(
+                                      segment.timestamp?.end
+                                    )}`
+                                  )
+                                ),
+                                React.createElement(
+                                  "div",
+                                  { className: "transcript-text" },
+                                  segment.text || ""
+                                )
+                              )
+                            )
+                          : React.createElement(
+                              "div",
+                              { className: "modal-content" },
+                              "No transcript available."
+                            )
+                      )
+                    : React.createElement(
+                        "pre",
+                        { className: "modal-content" },
+                        modalContent || "No notes available."
+                      )
                 )
               )
             )
